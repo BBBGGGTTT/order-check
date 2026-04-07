@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- saved from url=(0067)file:///C:/Users/%EB%B0%A9%EA%B1%B4%ED%83%9C/Downloads/index_2.html -->
+<!-- saved from url=(0067)file:///C:/Users/%EB%B0%A9%EA%B1%B4%ED%83%9C/Downloads/index_3.html -->
 <html lang="ko"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -362,6 +362,35 @@
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
 </style>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
+  import { getFirestore, collection, addDoc, getDocs, query, orderBy, limit } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyAujTkJfl3Wu6kngEb8FMGJvkFyGsHy-EU",
+    authDomain: "order-check-1bc89.firebaseapp.com",
+    projectId: "order-check-1bc89",
+    storageBucket: "order-check-1bc89.firebasestorage.app",
+    messagingSenderId: "24488768254",
+    appId: "1:24488768254:web:702bf8fb3273915e54abaf",
+    measurementId: "G-2VG0VVVB0T"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+
+  // 전역으로 노출
+  window.firebaseDb = db;
+  window.firebaseCollection = collection;
+  window.firebaseAddDoc = addDoc;
+  window.firebaseGetDocs = getDocs;
+  window.firebaseQuery = query;
+  window.firebaseOrderBy = orderBy;
+  window.firebaseLimit = limit;
+
+  console.log('Firebase 연결 완료!');
+</script>
 </head>
 <body>
 
@@ -466,6 +495,47 @@ let currentTab = 'all';
 let recCurrentSeason = '';
 
 // ── 파일 업로드 ──
+function saveToFirestore(fileName) {
+  if (!window.firebaseDb) { console.log('Firebase 미연결'); return; }
+  try {
+    var today = new Date();
+    var dateStr = today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2,'0') + '-' + String(today.getDate()).padStart(2,'0');
+    var keys = Object.keys(globalDf[0] || {});
+    var colName = keys.find(function(k) { return k.includes('상품명'); }) || '';
+    var colStock = keys.find(function(k) { return k.includes('현재고'); }) || '';
+    var col7d = keys.find(function(k) { return k.includes('판매량') || (k.includes('판매') && !k.includes('상품명')); }) || '';
+    var colOpt = keys.find(function(k) { return k.includes('옵션명'); }) || '';
+
+    // 상품별 요약 데이터만 저장 (전체 행이 아닌 집계)
+    var summary = {};
+    globalDf.forEach(function(row) {
+      var name = String(row[colName] || '').trim();
+      var opt = String(row[colOpt] || '').trim();
+      var stock = parseInt(row[colStock]) || 0;
+      var sales = parseInt(row[col7d]) || 0;
+      if (!name) return;
+      if (!summary[name]) summary[name] = { totalStock: 0, totalSales: 0, opts: [] };
+      summary[name].totalStock += stock;
+      summary[name].totalSales += sales;
+      summary[name].opts.push({ opt: opt, stock: stock, sales: sales });
+    });
+
+    window.firebaseAddDoc(window.firebaseCollection(window.firebaseDb, 'sales'), {
+      date: dateStr,
+      fileName: fileName,
+      uploadedAt: new Date().toISOString(),
+      totalProducts: Object.keys(summary).length,
+      summary: summary
+    }).then(function() {
+      console.log('Firestore 저장 완료:', dateStr);
+    }).catch(function(err) {
+      console.error('Firestore 저장 실패:', err);
+    });
+  } catch(e) {
+    console.error('저장 중 오류:', e);
+  }
+}
+
 window.addEventListener('DOMContentLoaded', function() {
   var fi = document.getElementById('fileInput');
   var uz = document.getElementById('uploadZone');
@@ -534,6 +604,8 @@ function loadFile(file) {
       document.getElementById('fileStatus').className = 'status-pill active';
       // 파일 로드 완료 → 자동 추천 실행
       runAutoRecommend();
+      // Firestore에 날짜별 데이터 저장
+      saveToFirestore(file.name);
     } catch(err) {
       alert('파일 로드 실패: ' + err.message);
       prog.style.width = '0%';
