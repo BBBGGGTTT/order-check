@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- saved from url=(0067)file:///C:/Users/%EB%B0%A9%EA%B1%B4%ED%83%9C/Downloads/index_9.html -->
+<!-- saved from url=(0068)file:///C:/Users/%EB%B0%A9%EA%B1%B4%ED%83%9C/Downloads/index_10.html -->
 <html lang="ko"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -422,7 +422,7 @@
         <div class="file-loaded" id="fileLoaded" style="display:none"></div>
       </div>
       <input type="file" id="fileInput" accept=".xlsx,.xls" style="display:none;">
-      <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+      <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width: 0%;"></div></div>
     </div>
 
     <!-- 2. 기준 -->
@@ -498,37 +498,53 @@ function saveToFirestore(fileName) {
   if (!window.firebaseDb) { console.log('Firebase 미연결'); return; }
   try {
     var today = new Date();
-    var dateStr = today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2,'0') + '-' + String(today.getDate()).padStart(2,'0');
+    var yy = today.getFullYear();
+    var mm = String(today.getMonth()+1).padStart(2,'0');
+    var dd = String(today.getDate()).padStart(2,'0');
+    var dateStr = yy + '-' + mm + '-' + dd;
     var keys = Object.keys(globalDf[0] || {});
     var colName = keys.find(function(k) { return k.includes('상품명'); }) || '';
-    var colStock = keys.find(function(k) { return k.includes('현재고'); }) || '';
-    var col7d = keys.find(function(k) { return k.includes('판매량') || (k.includes('판매') && !k.includes('상품명')); }) || '';
     var colOpt = keys.find(function(k) { return k.includes('옵션명'); }) || '';
 
-    // 상품별 요약 데이터만 저장 (전체 행이 아닌 집계)
-    var summary = {};
+    // 당일 날짜 컬럼 찾기 - 마지막 날짜 컬럼 사용
+    var dateCols = keys.filter(function(k) {
+      return k.includes('04') || k.includes('03') || k.includes('05');
+    });
+    var todayCol = dateCols[dateCols.length - 1] || '';
+    console.log('당일 판매량 컬럼:', todayCol);
+
+    // 상품코드별 옵션 데이터 그룹화
+    var productMap = {};
     globalDf.forEach(function(row) {
       var name = String(row[colName] || '').trim();
       var opt = String(row[colOpt] || '').trim();
-      var stock = parseInt(row[colStock]) || 0;
-      var sales = parseInt(row[col7d]) || 0;
-      if (!name) return;
-      if (!summary[name]) summary[name] = { totalStock: 0, totalSales: 0, opts: [] };
-      summary[name].totalStock += stock;
-      summary[name].totalSales += sales;
-      summary[name].opts.push({ opt: opt, stock: stock, sales: sales });
+      var todaySales = parseInt(row[todayCol]) || 0;
+      if (!name || !opt) return;
+      var code = extractCode(name) || name.slice(0,20);
+      if (!productMap[code]) productMap[code] = { name: name, opts: {} };
+      productMap[code].opts[opt] = todaySales;
     });
 
-    window.firebaseAddDoc(window.firebaseCollection(window.firebaseDb, 'sales'), {
-      date: dateStr,
-      fileName: fileName,
-      uploadedAt: new Date().toISOString(),
-      totalProducts: Object.keys(summary).length,
-      summary: summary
-    }).then(function() {
-      console.log('Firestore 저장 완료:', dateStr);
-    }).catch(function(err) {
-      console.error('Firestore 저장 실패:', err);
+    // 상품별로 문서 저장
+    var codes = Object.keys(productMap);
+    var saved = 0;
+    codes.forEach(function(code) {
+      var prod = productMap[code];
+      window.firebaseAddDoc(window.firebaseCollection(window.firebaseDb, 'daily_sales'), {
+        date: dateStr,
+        code: code,
+        productName: prod.name,
+        fileName: fileName,
+        uploadedAt: new Date().toISOString(),
+        optSales: prod.opts
+      }).then(function() {
+        saved++;
+        if (saved === codes.length) {
+          console.log('Firestore 저장 완료! 총', saved, '개 상품 저장됨 (' + dateStr + ')');
+        }
+      }).catch(function(err) {
+        console.error('Firestore 저장 실패:', err);
+      });
     });
   } catch(e) {
     console.error('저장 중 오류:', e);
