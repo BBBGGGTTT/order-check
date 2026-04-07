@@ -1,10 +1,9 @@
 <!DOCTYPE html>
-<!-- saved from url=(0067)file:///C:/Users/%EB%B0%A9%EA%B1%B4%ED%83%9C/Downloads/index_3.html -->
+<!-- saved from url=(0067)file:///C:/Users/%EB%B0%A9%EA%B1%B4%ED%83%9C/Downloads/index_6.html -->
 <html lang="ko"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>발주 필요 여부 확인</title>
-<script src="./index_files/xlsx.full.min.js.다운로드"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=JetBrains+Mono:wght@400;600&display=swap');
 
@@ -537,6 +536,11 @@ function saveToFirestore(fileName) {
 }
 
 window.addEventListener('DOMContentLoaded', function() {
+  // XLSX 로드 확인
+  if (typeof XLSX === 'undefined') {
+    console.error('XLSX 라이브러리 로드 실패');
+    return;
+  }
   var fi = document.getElementById('fileInput');
   var uz = document.getElementById('uploadZone');
   var pi = document.getElementById('productInput');
@@ -1838,4 +1842,5 @@ function downloadExcel(mode = 'need') {
 }
 </script>
 
+<script src="./index_files/xlsx.full.min.js.다운로드"></script>
 </body></html>
