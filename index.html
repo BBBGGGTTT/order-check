@@ -506,12 +506,29 @@ function saveToFirestore(fileName) {
     var colName = keys.find(function(k) { return k.includes('상품명'); }) || '';
     var colOpt = keys.find(function(k) { return k.includes('옵션명'); }) || '';
 
-    // 당일 날짜 컬럼 찾기 - 마지막 날짜 컬럼 사용
+    // 당일 날짜 컬럼 찾기 - 오늘 날짜와 일치하는 컬럼
+    var todayShort = mm + '-' + dd; // 예: '04-07'
+    var todayFull = yy + '-' + mm + '-' + dd; // 예: '2026-04-07'
+
+    // 모든 날짜 컬럼 추출 (판매량 합계 컬럼 제외)
     var dateCols = keys.filter(function(k) {
-      return k.includes('04') || k.includes('03') || k.includes('05');
+      var clean = k.replace(/\n/g, '').trim();
+      return clean.startsWith('2026-') && !clean.includes('판매량') && !clean.includes('~');
     });
-    var todayCol = dateCols[dateCols.length - 1] || '';
-    console.log('당일 판매량 컬럼:', todayCol);
+
+    // 오늘 날짜와 일치하는 컬럼 찾기
+    var todayCol = dateCols.find(function(k) {
+      var clean = k.replace(/\n/g, '').trim();
+      return clean === todayFull || clean.endsWith(todayShort);
+    }) || '';
+
+    // 못찾으면 마지막 날짜 컬럼 사용 (fallback)
+    if (!todayCol) {
+      todayCol = dateCols[dateCols.length - 1] || '';
+      console.log('오늘 날짜 컬럼 못찾음, 마지막 컬럼 사용:', todayCol);
+    } else {
+      console.log('오늘 날짜 컬럼 찾음:', todayCol);
+    }
 
     // 상품코드별 옵션 데이터 그룹화
     var productMap = {};
