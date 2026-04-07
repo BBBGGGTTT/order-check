@@ -364,7 +364,7 @@
 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
-  import { getFirestore, collection, addDoc, getDocs, query, orderBy, limit } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
+  import { getFirestore, collection, addDoc, getDocs, query, orderBy, limit, setDoc, doc as firestoreDoc } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyAujTkJfl3Wu6kngEb8FMGJvkFyGsHy-EU",
@@ -387,6 +387,8 @@
   window.firebaseQuery = query;
   window.firebaseOrderBy = orderBy;
   window.firebaseLimit = limit;
+  window.firebaseSetDoc = setDoc;
+  window.firebaseDoc = firestoreDoc;
 
   console.log('Firebase 연결 완료!');
 </script>
@@ -505,24 +507,19 @@ function saveToFirestore(fileName) {
     var keys = Object.keys(globalDf[0] || {});
     var colName = keys.find(function(k) { return k.includes('상품명'); }) || '';
     var colOpt = keys.find(function(k) { return k.includes('옵션명'); }) || '';
+    var colStock = keys.find(function(k) { return k.includes('현재고'); }) || '';
 
-    // 당일 날짜 컬럼 찾기 - 오늘 날짜와 일치하는 컬럼
-    var todayShort = mm + '-' + dd; // 예: '04-07'
-    var todayFull = yy + '-' + mm + '-' + dd; // 예: '2026-04-07'
-
-    // 모든 날짜 컬럼 추출 (판매량 합계 컬럼 제외)
+    // 당일 날짜 컬럼 찾기
+    var todayShort = mm + '-' + dd;
+    var todayFull = yy + '-' + mm + '-' + dd;
     var dateCols = keys.filter(function(k) {
       var clean = k.replace(/\n/g, '').trim();
       return clean.startsWith('2026-') && !clean.includes('판매량') && !clean.includes('~');
     });
-
-    // 오늘 날짜와 일치하는 컬럼 찾기
     var todayCol = dateCols.find(function(k) {
       var clean = k.replace(/\n/g, '').trim();
       return clean === todayFull || clean.endsWith(todayShort);
     }) || '';
-
-    // 못찾으면 마지막 날짜 컬럼 사용 (fallback)
     if (!todayCol) {
       todayCol = dateCols[dateCols.length - 1] || '';
       console.log('오늘 날짜 컬럼 못찾음, 마지막 컬럼 사용:', todayCol);
@@ -530,38 +527,72 @@ function saveToFirestore(fileName) {
       console.log('오늘 날짜 컬럼 찾음:', todayCol);
     }
 
-    // 상품코드별 옵션 데이터 그룹화
+    // 상품코드별 전체 옵션 데이터 그룹화 (판매량 0 포함)
     var productMap = {};
     globalDf.forEach(function(row) {
       var name = String(row[colName] || '').trim();
       var opt = String(row[colOpt] || '').trim();
       var todaySales = parseInt(row[todayCol]) || 0;
+      var stock = parseInt(row[colStock]) || 0;
       if (!name || !opt) return;
       var code = extractCode(name) || name.slice(0,20);
-      if (!productMap[code]) productMap[code] = { name: name, opts: {} };
-      productMap[code].opts[opt] = todaySales;
+      if (!productMap[code]) productMap[code] = { name: name, opts: [], allOpts: [] };
+      // 전체 옵션 목록 (판매량 0 포함)
+      productMap[code].allOpts.push(opt);
+      // 당일 판매량
+      productMap[code].opts.push({ opt: opt, sales: todaySales, stock: stock });
     });
 
-    // 상품별로 문서 저장
     var codes = Object.keys(productMap);
-    var saved = 0;
+    var dailySaved = 0;
+    var productsSaved = 0;
+
     codes.forEach(function(code) {
       var prod = productMap[code];
+
+      // 1. daily_sales 컬렉션: 당일 판매량 저장 (전체 옵션 포함, 판매량 0도 포함)
+      var optSales = {};
+      prod.opts.forEach(function(o) { optSales[o.opt] = o.sales; });
+
       window.firebaseAddDoc(window.firebaseCollection(window.firebaseDb, 'daily_sales'), {
         date: dateStr,
         code: code,
         productName: prod.name,
         fileName: fileName,
         uploadedAt: new Date().toISOString(),
-        optSales: prod.opts
+        optSales: optSales
       }).then(function() {
-        saved++;
-        if (saved === codes.length) {
-          console.log('Firestore 저장 완료! 총', saved, '개 상품 저장됨 (' + dateStr + ')');
+        dailySaved++;
+        if (dailySaved === codes.length) {
+          console.log('daily_sales 저장 완료! 총', dailySaved, '개 상품 (' + dateStr + ')');
         }
       }).catch(function(err) {
-        console.error('Firestore 저장 실패:', err);
+        console.error('daily_sales 저장 실패:', err);
       });
+
+      // 2. products 컬렉션: 전체 옵션 목록 저장 (최신 상태 유지)
+      var { setDoc, doc } = window.firebaseSetDoc
+        ? { setDoc: window.firebaseSetDoc, doc: window.firebaseDoc }
+        : { setDoc: null, doc: null };
+
+      if (window.firebaseSetDoc && window.firebaseDoc) {
+        window.firebaseSetDoc(
+          window.firebaseDoc(window.firebaseDb, 'products', code),
+          {
+            code: code,
+            productName: prod.name,
+            allOpts: prod.allOpts,
+            updatedAt: new Date().toISOString()
+          }
+        ).then(function() {
+          productsSaved++;
+          if (productsSaved === codes.length) {
+            console.log('products 저장 완료! 총', productsSaved, '개 상품');
+          }
+        }).catch(function(err) {
+          console.error('products 저장 실패:', err);
+        });
+      }
     });
   } catch(e) {
     console.error('저장 중 오류:', e);
