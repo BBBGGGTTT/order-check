@@ -560,12 +560,13 @@ function loadFromFirestore() {
       var code = data.code || '';
       var productName = data.productName || '';
       var optSales = data.optSales || {};
+      var optStock = data.optStock || {};
       Object.keys(optSales).forEach(function(opt) {
         var row = {};
         row['상품명'] = productName;
         row['옵션명'] = opt;
         row['7일 판매량'] = optSales[opt] || 0;
-        row['현재고'] = 0; // Firebase에 재고 없음 - 추후 추가 가능
+        row['현재고'] = optStock[opt] || 0;
         row['_code'] = code;
         rows.push(row);
       });
@@ -577,9 +578,12 @@ function loadFromFirestore() {
     // 품절/시즌 정보 products 컬렉션에서 로드
     window.firebaseGetDocs(window.firebaseCollection(window.firebaseDb, 'products')).then(function(prodSnap) {
       globalSeason = {};
+      globalSoldOut = {};
       prodSnap.forEach(function(doc) {
         var data = doc.data();
-        if (data.season) globalSeason[data.productName] = data.season;
+        if (data.season && data.productName) {
+          globalSeason[data.productName] = data.season;
+        }
       });
 
       // fileLoaded 표시
@@ -666,7 +670,11 @@ function saveToFirestore(fileName) {
 
       // 1. daily_sales 컬렉션: 날짜+코드를 문서ID로 사용 → 중복시 덮어쓰기
       var optSales = {};
-      prod.opts.forEach(function(o) { optSales[o.opt] = o.sales; });
+      var optStock = {};
+      prod.opts.forEach(function(o) {
+        optSales[o.opt] = o.sales;
+        optStock[o.opt] = o.stock;
+      });
       var docId = dateStr + '_' + code;
 
       window.firebaseSetDoc(
@@ -677,7 +685,8 @@ function saveToFirestore(fileName) {
           productName: prod.name,
           fileName: fileName,
           uploadedAt: new Date().toISOString(),
-          optSales: optSales
+          optSales: optSales,
+          optStock: optStock
         }
       ).then(function() {
         dailySaved++;
@@ -690,12 +699,14 @@ function saveToFirestore(fileName) {
 
       // 2. products 컬렉션: 상품코드를 문서ID로 사용 → 항상 최신 덮어쓰기
       if (window.firebaseSetDoc && window.firebaseDoc) {
+        var prodSeason = globalSeason[prod.name] || '';
         window.firebaseSetDoc(
           window.firebaseDoc(window.firebaseDb, 'products', code),
           {
             code: code,
             productName: prod.name,
             allOpts: prod.allOpts,
+            season: prodSeason,
             updatedAt: new Date().toISOString()
           }
         ).then(function() {
