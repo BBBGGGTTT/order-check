@@ -882,7 +882,8 @@ function renderRecommend(candidates) {
   }
 
   const allBtn = document.createElement('button');
-  allBtn.textContent = '전체 (' + candidates.length + ')';
+  var allNeedCount = candidates.filter(function(c) { return c.isNeed; }).length;
+  allBtn.textContent = '전체 (' + allNeedCount + ')';
   allBtn.dataset.color = '#2563eb';
   allBtn.dataset.bg = '#eff6ff';
   allBtn.style.cssText = 'padding:6px 12px;font-size:12px;font-weight:600;border:1px solid #2563eb;border-radius:20px;background:#2563eb;color:#fff;cursor:pointer;white-space:nowrap;font-family:Noto Sans KR,sans-serif;';
@@ -890,7 +891,7 @@ function renderRecommend(candidates) {
   filterDiv.appendChild(allBtn);
 
   seasonList.forEach(function(s) {
-    const cnt = candidates.filter(function(c) { return c.season === s; }).length;
+    const cnt = candidates.filter(function(c) { return c.season === s && c.isNeed; }).length;
     const color = s.includes('(Y)') ? '#16a34a' : s.includes('(OFF)') ? '#d97706' : s.includes('(N)') ? '#9ca3af' : '#2563eb';
     const bg = s.includes('(Y)') ? '#f0fdf4' : s.includes('(OFF)') ? '#fffbeb' : s.includes('(N)') ? '#f3f4f6' : '#eff6ff';
     const btn = document.createElement('button');
