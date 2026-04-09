@@ -426,6 +426,10 @@
       </div>
       <input type="file" id="fileInput" accept=".xlsx,.xls" style="display:none;">
       <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+      <div id="firebaseSaveWrap" style="display:none;margin-top:8px;">
+        <button onclick="onClickSaveFirebase()" style="width:100%;padding:10px;font-size:13px;font-weight:600;border:1px solid #0f6e56;border-radius:8px;background:#e1f5ee;color:#0f6e56;cursor:pointer;font-family:'Noto Sans KR',sans-serif;">☁️ Firebase에 저장</button>
+        <div id="firebaseSaveStatus" style="font-size:11px;color:#6b7280;text-align:center;margin-top:4px;"></div>
+      </div>
     </div>
 
     <!-- 2. 기준 -->
@@ -469,14 +473,6 @@ KJST2189
     <div style="display:flex;gap:4px;margin-bottom:0;">
       <button id="modeRecommend" onclick="switchMode('recommend')" style="flex:1;padding:8px;font-size:12px;font-weight:600;border:1px solid #2563eb;border-radius:6px 6px 0 0;background:#2563eb;color:#fff;cursor:pointer;font-family:'Noto Sans KR',sans-serif;">⭐ 자동 추천</button>
       <button id="modeCheck" onclick="switchMode('check')" style="flex:1;padding:8px;font-size:12px;font-weight:600;border:1px solid #e5e7eb;border-radius:6px 6px 0 0;background:#f9fafb;color:#6b7280;cursor:pointer;font-family:'Noto Sans KR',sans-serif;">🔍 발주 확인</button>
-    </div>
-
-    <!-- Firebase 저장 버튼 -->
-    <div id="firebaseSaveWrap" style="display:none;">
-      <button onclick="onClickSaveFirebase()" style="width:100%;padding:10px;font-size:13px;font-weight:600;border:1px solid #0f6e56;border-radius:8px;background:#e1f5ee;color:#0f6e56;cursor:pointer;font-family:'Noto Sans KR',sans-serif;">
-        ☁️ Firebase에 저장
-      </button>
-      <div id="firebaseSaveStatus" style="font-size:11px;color:#6b7280;text-align:center;margin-top:4px;"></div>
     </div>
 
     <!-- 실행 -->
