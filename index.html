@@ -471,6 +471,14 @@ KJST2189
       <button id="modeCheck" onclick="switchMode('check')" style="flex:1;padding:8px;font-size:12px;font-weight:600;border:1px solid #e5e7eb;border-radius:6px 6px 0 0;background:#f9fafb;color:#6b7280;cursor:pointer;font-family:'Noto Sans KR',sans-serif;">🔍 발주 확인</button>
     </div>
 
+    <!-- Firebase 저장 버튼 -->
+    <div id="firebaseSaveWrap" style="display:none;">
+      <button onclick="onClickSaveFirebase()" style="width:100%;padding:10px;font-size:13px;font-weight:600;border:1px solid #0f6e56;border-radius:8px;background:#e1f5ee;color:#0f6e56;cursor:pointer;font-family:'Noto Sans KR',sans-serif;">
+        ☁️ Firebase에 저장
+      </button>
+      <div id="firebaseSaveStatus" style="font-size:11px;color:#6b7280;text-align:center;margin-top:4px;"></div>
+    </div>
+
     <!-- 실행 -->
     <div class="run-btn-wrap" style="display: none;">
       <button class="run-btn" id="runBtn" onclick="analyze()">
@@ -498,6 +506,23 @@ let recCurrentSeason = '';
 let firestoreSaved = false; // Firestore 중복 저장 방지
 
 // ── 파일 업로드 ──
+function onClickSaveFirebase() {
+  if (!globalDf) { alert('먼저 파일을 업로드해주세요!'); return; }
+  var btn = event.target;
+  var status = document.getElementById('firebaseSaveStatus');
+  btn.disabled = true;
+  btn.textContent = '저장 중...';
+  if (status) status.textContent = '';
+  firestoreSaved = false;
+  saveToFirestore(window._lastFileName || '수동저장');
+  // 완료 후 버튼 복원
+  setTimeout(function() {
+    btn.disabled = false;
+    btn.textContent = '☁️ Firebase에 저장';
+    if (status) status.textContent = '✓ 저장 완료!';
+  }, 5000);
+}
+
 function loadFromFirestore() {
   if (!window.firebaseDb) { console.log('Firebase 미연결'); return; }
   var today = new Date();
@@ -753,12 +778,15 @@ function loadFile(file) {
 
       document.getElementById('fileLoaded').style.display = 'block';
       document.getElementById('fileLoaded').textContent = '✓ ' + file.name;
+      window._lastFileName = file.name;
+      var wrap = document.getElementById('firebaseSaveWrap');
+      if (wrap) wrap.style.display = 'block';
+      var status = document.getElementById('firebaseSaveStatus');
+      if (status) status.textContent = '';
       document.getElementById('fileStatus').textContent = globalDf.length.toLocaleString() + '행 로드됨';
       document.getElementById('fileStatus').className = 'status-pill active';
       // 파일 로드 완료 → 자동 추천 실행
       runAutoRecommend();
-      // Firestore에 날짜별 데이터 저장
-      saveToFirestore(file.name);
     } catch(err) {
       alert('파일 로드 실패: ' + err.message);
       prog.style.width = '0%';
