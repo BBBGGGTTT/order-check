@@ -550,18 +550,22 @@ function saveToFirestore(fileName) {
     codes.forEach(function(code) {
       var prod = productMap[code];
 
-      // 1. daily_sales 컬렉션: 당일 판매량 저장 (전체 옵션 포함, 판매량 0도 포함)
+      // 1. daily_sales 컬렉션: 날짜+코드를 문서ID로 사용 → 중복시 덮어쓰기
       var optSales = {};
       prod.opts.forEach(function(o) { optSales[o.opt] = o.sales; });
+      var docId = dateStr + '_' + code;
 
-      window.firebaseAddDoc(window.firebaseCollection(window.firebaseDb, 'daily_sales'), {
-        date: dateStr,
-        code: code,
-        productName: prod.name,
-        fileName: fileName,
-        uploadedAt: new Date().toISOString(),
-        optSales: optSales
-      }).then(function() {
+      window.firebaseSetDoc(
+        window.firebaseDoc(window.firebaseDb, 'daily_sales', docId),
+        {
+          date: dateStr,
+          code: code,
+          productName: prod.name,
+          fileName: fileName,
+          uploadedAt: new Date().toISOString(),
+          optSales: optSales
+        }
+      ).then(function() {
         dailySaved++;
         if (dailySaved === codes.length) {
           console.log('daily_sales 저장 완료! 총', dailySaved, '개 상품 (' + dateStr + ')');
@@ -570,11 +574,7 @@ function saveToFirestore(fileName) {
         console.error('daily_sales 저장 실패:', err);
       });
 
-      // 2. products 컬렉션: 전체 옵션 목록 저장 (최신 상태 유지)
-      var { setDoc, doc } = window.firebaseSetDoc
-        ? { setDoc: window.firebaseSetDoc, doc: window.firebaseDoc }
-        : { setDoc: null, doc: null };
-
+      // 2. products 컬렉션: 상품코드를 문서ID로 사용 → 항상 최신 덮어쓰기
       if (window.firebaseSetDoc && window.firebaseDoc) {
         window.firebaseSetDoc(
           window.firebaseDoc(window.firebaseDb, 'products', code),
