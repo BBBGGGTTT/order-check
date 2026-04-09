@@ -494,10 +494,13 @@ let currentMode = 'recommend'; // recommend | check
 let allResults = [];
 let currentTab = 'all';
 let recCurrentSeason = '';
+let firestoreSaved = false; // Firestore 중복 저장 방지
 
 // ── 파일 업로드 ──
 function saveToFirestore(fileName) {
   if (!window.firebaseDb) { console.log('Firebase 미연결'); return; }
+  if (firestoreSaved) { console.log('이미 저장됨, 중복 저장 방지'); return; }
+  firestoreSaved = true;
   try {
     var today = new Date();
     var yy = today.getFullYear();
@@ -616,6 +619,7 @@ window.addEventListener('load', function() {
 });
 
 function loadFile(file) {
+  firestoreSaved = false; // 새 파일 업로드시 플래그 초기화
   const prog = document.getElementById('progressFill');
   prog.style.width = '30%';
   const reader = new FileReader();
