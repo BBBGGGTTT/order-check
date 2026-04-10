@@ -1,6 +1,32 @@
 <!DOCTYPE html>
 <!-- saved from url=(0135)file:///C:/Users/%EB%B0%A9%EA%B1%B4%ED%83%9C/Downloads/%EB%B0%9C%EC%A3%BC%ED%95%84%EC%9A%94%EC%97%AC%EB%B6%80%ED%99%95%EC%9D%B8_37.html -->
-<html lang="ko"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<html lang="ko"><head>
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
+  import { getFirestore, collection, addDoc, getDocs, query, orderBy, limit, setDoc, doc as firestoreDoc, where } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
+  const firebaseConfig = {
+    apiKey: "AIzaSyAujTkJfl3Wu6kngEb8FMGJvkFyGsHy-EU",
+    authDomain: "order-check-1bc89.firebaseapp.com",
+    projectId: "order-check-1bc89",
+    storageBucket: "order-check-1bc89.firebasestorage.app",
+    messagingSenderId: "24488768254",
+    appId: "1:24488768254:web:702bf8fb3273915e54abaf"
+  };
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+  window.firebaseDb = db;
+  window.firebaseCollection = collection;
+  window.firebaseAddDoc = addDoc;
+  window.firebaseGetDocs = getDocs;
+  window.firebaseQuery = query;
+  window.firebaseOrderBy = orderBy;
+  window.firebaseLimit = limit;
+  window.firebaseSetDoc = setDoc;
+  window.firebaseDoc = firestoreDoc;
+  window.firebaseWhere = where;
+  console.log('Firebase 연결 완료!');
+</script>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>발주 필요 여부 확인</title>
