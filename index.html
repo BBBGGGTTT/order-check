@@ -556,13 +556,15 @@ function loadFromFirestore() {
       var code = data.code || '';
       var productName = data.productName || '';
       var optSales = data.optSales || {};
+      var opt7dSales = data.opt7dSales || {};
       var optStock = data.optStock || {};
       var optOrder = data.optOrder || Object.keys(optSales);
       optOrder.forEach(function(opt) {
         var row = {};
         row['상품명'] = productName;
         row['옵션명'] = opt;
-        row['7일 판매량'] = optSales[opt] || 0;
+        row['당일 판매량'] = optSales[opt] || 0;
+        row['7일 판매량'] = opt7dSales[opt] || 0;
         row['현재고'] = optStock[opt] || 0;
         row['_code'] = code;
         rows.push(row);
@@ -656,18 +658,24 @@ function saveToFirestore(fileName) {
 
     // 상품코드별 전체 옵션 데이터 그룹화 (판매량 0 포함)
     var productMap = {};
+    // N일 판매량 합계 컬럼 찾기 (~기호 포함된 판매량 컬럼)
+    var col7d = keys.find(function(k) {
+      return k.includes('~') && k.includes('판매');
+    }) || keys.find(function(k) {
+      return k.includes('판매량') && !k.match(/2026/);
+    }) || '';
+
     globalDf.forEach(function(row) {
       var name = String(row[colName] || '').trim();
       var opt = String(row[colOpt] || '').trim();
       var todaySales = parseInt(row[todayCol]) || 0;
+      var sales7d = parseInt(row[col7d]) || 0;
       var stock = parseInt(row[colStock]) || 0;
       if (!name || !opt) return;
       var code = extractCode(name) || name.slice(0,20);
       if (!productMap[code]) productMap[code] = { name: name, opts: [], allOpts: [] };
-      // 전체 옵션 목록 (판매량 0 포함)
       productMap[code].allOpts.push(opt);
-      // 당일 판매량
-      productMap[code].opts.push({ opt: opt, sales: todaySales, stock: stock });
+      productMap[code].opts.push({ opt: opt, sales: todaySales, sales7d: sales7d, stock: stock });
     });
 
     var codes = Object.keys(productMap);
@@ -715,25 +723,42 @@ function saveToFirestore(fileName) {
           console.error('daily_sales 저장 실패:', err);
         });
 
-        // 2. products 컬렉션
-        var prodSeason = globalSeason[prod.name] || '';
-        window.firebaseSetDoc(
-          window.firebaseDoc(window.firebaseDb, 'products', code),
-          {
-            code: code,
-            productName: prod.name,
-            allOpts: prod.allOpts,
-            season: prodSeason,
-            updatedAt: new Date().toISOString()
-          }
-        ).then(function() {
-          productsSaved++;
-          if (productsSaved === codes.length) {
-            console.log('products 저장 완료! 총', productsSaved, '개 상품');
-          }
-        }).catch(function(err) {
-          console.error('products 저장 실패:', err);
-        });
+        // 2. products 컬렉션: 신규/변경사항 있을 때만 저장
+        (function(codeRef, prodRef) {
+          var prodSeason = globalSeason[prodRef.name] || '';
+          var newOptsStr = JSON.stringify(prodRef.allOpts.slice().sort());
+          window.firebaseGetDocs(
+            window.firebaseQuery(
+              window.firebaseCollection(window.firebaseDb, 'products'),
+              window.firebaseWhere('code', '==', codeRef)
+            )
+          ).then(function(snap) {
+            var needUpdate = false;
+            if (snap.empty) {
+              needUpdate = true;
+              console.log('신규 상품:', codeRef);
+            } else {
+              var existing = snap.docs[0].data();
+              var existOptsStr = JSON.stringify((existing.allOpts || []).slice().sort());
+              if (existOptsStr !== newOptsStr || (existing.season || '') !== prodSeason) {
+                needUpdate = true;
+                console.log('상품 변경감지:', codeRef);
+              }
+            }
+            if (needUpdate) {
+              window.firebaseSetDoc(
+                window.firebaseDoc(window.firebaseDb, 'products', codeRef),
+                { code: codeRef, productName: prodRef.name, allOpts: prodRef.allOpts, season: prodSeason, updatedAt: new Date().toISOString() }
+              ).then(function() {
+                productsSaved++;
+                if (productsSaved === codes.length) console.log('products 처리 완료!');
+              }).catch(function(err) { console.error('products 저장 실패:', err); });
+            } else {
+              productsSaved++;
+              if (productsSaved === codes.length) console.log('products 처리 완료!');
+            }
+          }).catch(function(err) { console.error('products 조회 실패:', err); });
+        })(code, prod);
       });
 
       // 다음 청크 예약
@@ -783,7 +808,7 @@ function loadFile(file) {
       // 7일 판매량 컬럼명에서 날짜 범위 추출
       if (globalDf.length > 0) {
         const keys = Object.keys(globalDf[0]);
-        const col7d = keys.find(k => (k.includes('7일') || k.includes('9일') || k.includes('주')) && k.includes('판매')) || keys.find(k => k.includes('판매량') && !k.match(/\d{4}.*\d{2}.*\d{2}/));
+        const col7d = keys.find(k => k.includes('~') && k.includes('판매')) || keys.find(k => k.includes('판매량') && !k.match(/2026/));
         if (col7d) {
           const m = col7d.match(/\((\d+\.\d+\.\d+)~(\d+\.\d+\.\d+)\)/);
           if (m) {
@@ -904,7 +929,7 @@ function runAutoRecommend() {
   const keys = Object.keys(globalDf[0] || {});
   const colName = keys.find(k => k.includes('상품명')) || '';
   const colStock = keys.find(k => k.includes('현재고')) || '';
-  const col7d = keys.find(k => (k.includes('7일') || k.includes('9일') || k.includes('주')) && k.includes('판매')) || keys.find(k => k.includes('판매량') && !k.match(/\d{4}.*\d{2}.*\d{2}/)) || '';
+  const col7d = keys.find(k => k.includes('~') && k.includes('판매')) || keys.find(k => k.includes('판매량') && !k.match(/2026/)) || '';
   const colOpt = keys.find(k => k.includes('옵션명')) || '';
 
   if (!colName || !colStock || !col7d) return;
@@ -1456,7 +1481,7 @@ function analyze() {
   const keys = Object.keys(sampleRow);
   const colName = keys.find(k => k.includes('상품명')) || '';
   const colStock = keys.find(k => k.includes('현재고')) || '';
-  const col7d = keys.find(k => (k.includes('7일') || k.includes('9일') || k.includes('주')) && k.includes('판매')) || keys.find(k => k.includes('판매량') && !k.match(/\d{4}.*\d{2}.*\d{2}/)) || '';
+  const col7d = keys.find(k => k.includes('~') && k.includes('판매')) || keys.find(k => k.includes('판매량') && !k.match(/2026/)) || '';
   const colOpt = keys.find(k => k.includes('옵션명')) || '';
 
   if (!colName || !colStock || !col7d) {
