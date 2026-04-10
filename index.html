@@ -673,44 +673,49 @@ function saveToFirestore(fileName) {
     var codes = Object.keys(productMap);
     var dailySaved = 0;
     var productsSaved = 0;
+    var chunkSize = 100;
+    var delay = 500; // 청크 간 0.5초 간격
 
-    codes.forEach(function(code) {
-      var prod = productMap[code];
+    function saveChunk(startIdx) {
+      var chunk = codes.slice(startIdx, startIdx + chunkSize);
+      if (chunk.length === 0) return;
 
-      // 1. daily_sales 컬렉션: 날짜+코드를 문서ID로 사용 → 중복시 덮어쓰기
-      var optSales = {};
-      var optStock = {};
-      var optOrder = []; // 옵션 순서 배열
-      prod.opts.forEach(function(o) {
-        optSales[o.opt] = o.sales;
-        optStock[o.opt] = o.stock;
-        optOrder.push(o.opt);
-      });
-      var docId = dateStr + '_' + code;
+      chunk.forEach(function(code) {
+        var prod = productMap[code];
 
-      window.firebaseSetDoc(
-        window.firebaseDoc(window.firebaseDb, 'daily_sales', docId),
-        {
-          date: dateStr,
-          code: code,
-          productName: prod.name,
-          fileName: fileName,
-          uploadedAt: new Date().toISOString(),
-          optSales: optSales,
-          optStock: optStock,
-          optOrder: optOrder
-        }
-      ).then(function() {
-        dailySaved++;
-        if (dailySaved === codes.length) {
-          console.log('daily_sales 저장 완료! 총', dailySaved, '개 상품 (' + dateStr + ')');
-        }
-      }).catch(function(err) {
-        console.error('daily_sales 저장 실패:', err);
-      });
+        // 1. daily_sales 컬렉션
+        var optSales = {};
+        var optStock = {};
+        var optOrder = [];
+        prod.opts.forEach(function(o) {
+          optSales[o.opt] = o.sales;
+          optStock[o.opt] = o.stock;
+          optOrder.push(o.opt);
+        });
+        var docId = dateStr + '_' + code;
 
-      // 2. products 컬렉션: 상품코드를 문서ID로 사용 → 항상 최신 덮어쓰기
-      if (window.firebaseSetDoc && window.firebaseDoc) {
+        window.firebaseSetDoc(
+          window.firebaseDoc(window.firebaseDb, 'daily_sales', docId),
+          {
+            date: dateStr,
+            code: code,
+            productName: prod.name,
+            fileName: fileName,
+            uploadedAt: new Date().toISOString(),
+            optSales: optSales,
+            optStock: optStock,
+            optOrder: optOrder
+          }
+        ).then(function() {
+          dailySaved++;
+          if (dailySaved === codes.length) {
+            console.log('daily_sales 저장 완료! 총', dailySaved, '개 상품 (' + dateStr + ')');
+          }
+        }).catch(function(err) {
+          console.error('daily_sales 저장 실패:', err);
+        });
+
+        // 2. products 컬렉션
         var prodSeason = globalSeason[prod.name] || '';
         window.firebaseSetDoc(
           window.firebaseDoc(window.firebaseDb, 'products', code),
@@ -729,8 +734,17 @@ function saveToFirestore(fileName) {
         }).catch(function(err) {
           console.error('products 저장 실패:', err);
         });
+      });
+
+      // 다음 청크 예약
+      if (startIdx + chunkSize < codes.length) {
+        setTimeout(function() {
+          saveChunk(startIdx + chunkSize);
+        }, delay);
       }
-    });
+    }
+
+    saveChunk(0); // 첫 청크 시작
   } catch(e) {
     console.error('저장 중 오류:', e);
   }
