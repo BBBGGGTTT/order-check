@@ -439,7 +439,7 @@
         <div class="criteria-row">
           <span>안정재고</span>
           <span>=</span>
-          <span class="criteria-val">7일 판매량 × 배수</span>
+          <span class="criteria-val">일주일 판매량량 × 배수</span>
         </div>
         <div class="criteria-row">
           <span>발주 필요</span>
@@ -564,7 +564,7 @@ function loadFromFirestore() {
         row['상품명'] = productName;
         row['옵션명'] = opt;
         row['당일 판매량'] = optSales[opt] || 0;
-        row['7일 판매량'] = opt7dSales[opt] || 0;
+        row['일주일 판매량량'] = opt7dSales[opt] || 0;
         row['현재고'] = optStock[opt] || 0;
         row['_code'] = code;
         rows.push(row);
@@ -572,7 +572,7 @@ function loadFromFirestore() {
     });
 
     globalDf = rows;
-    global7dLabel = '7일 판매량 (' + dateStr + ')';
+    global7dLabel = '일주일 판매량량 (' + dateStr + ')';
 
     // 품절/시즌 정보 products 컬렉션에서 로드
     window.firebaseGetDocs(window.firebaseCollection(window.firebaseDb, 'products')).then(function(prodSnap) {
@@ -805,14 +805,14 @@ function loadFile(file) {
       if (!sheetName) { alert('일별 시트를 찾을 수 없습니다.'); prog.style.width='0%'; return; }
       const ws = wb.Sheets[sheetName];
       globalDf = XLSX.utils.sheet_to_json(ws, { defval: '' });
-      // 7일 판매량 컬럼명에서 날짜 범위 추출
+      // 일주일 판매량량 컬럼명에서 날짜 범위 추출
       if (globalDf.length > 0) {
         const keys = Object.keys(globalDf[0]);
         const col7d = keys.find(k => k.includes('~') && k.includes('판매')) || keys.find(k => k.includes('판매량') && !k.match(/2026/));
         if (col7d) {
           const m = col7d.match(/\((\d+\.\d+\.\d+)~(\d+\.\d+\.\d+)\)/);
           if (m) {
-            global7dLabel = '7일 판매량\n(' + m[1] + '~' + m[2] + ')';
+            global7dLabel = '일주일 판매량량\n(' + m[1] + '~' + m[2] + ')';
           }
         }
       }
@@ -1162,11 +1162,61 @@ function renderRecommend(candidates) {
   dlWrap.appendChild(dlBtn);
   dlWrap.appendChild(dlMenu);
 
+  // 검색란
+  const searchWrap = document.createElement('div');
+  searchWrap.style.cssText = 'display:flex;align-items:center;gap:6px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:5px 10px;';
+  const searchIcon = document.createElement('span');
+  searchIcon.textContent = '🔍';
+  searchIcon.style.cssText = 'font-size:13px;';
+  const searchInp = document.createElement('input');
+  searchInp.type = 'text';
+  searchInp.placeholder = '상품명 검색';
+  searchInp.style.cssText = 'border:none;outline:none;background:transparent;font-size:12px;color:#111827;width:120px;font-family:Noto Sans KR,sans-serif;';
+  searchInp.oninput = function() {
+    var q = this.value.trim().toLowerCase();
+    document.querySelectorAll('#recTableWrap .rec-card').forEach(function(card) {
+      var name = (card.dataset.name || '').toLowerCase();
+      card.style.display = (!q || name.includes(q)) ? '' : 'none';
+    });
+  };
+  searchWrap.appendChild(searchIcon);
+  searchWrap.appendChild(searchInp);
+
   toolbarDiv.appendChild(expBtn);
   toolbarDiv.appendChild(colBtn);
+  toolbarDiv.appendChild(searchWrap);
   toolbarDiv.appendChild(multiWrap);
   toolbarDiv.appendChild(dlWrap);
   mainArea.appendChild(toolbarDiv);
+
+  // 발주필요/재고충분 탭
+  var recStatusTab = 'all';
+  const statusTabDiv = document.createElement('div');
+  statusTabDiv.style.cssText = 'display:flex;gap:6px;margin-bottom:12px;';
+  [
+    { label: '전체', val: 'all' },
+    { label: '발주필요', val: 'need' },
+    { label: '재고충분', val: 'ok' }
+  ].forEach(function(t) {
+    const tb = document.createElement('button');
+    tb.textContent = t.label;
+    tb.style.cssText = 'padding:5px 14px;font-size:12px;font-weight:600;border:1px solid #e5e7eb;border-radius:20px;background:' + (t.val==='all'?'#2563eb':'#f9fafb') + ';color:' + (t.val==='all'?'#fff':'#6b7280') + ';cursor:pointer;font-family:Noto Sans KR,sans-serif;';
+    tb.onclick = function() {
+      recStatusTab = t.val;
+      statusTabDiv.querySelectorAll('button').forEach(function(b) {
+        b.style.background = '#f9fafb'; b.style.color = '#6b7280'; b.style.borderColor = '#e5e7eb';
+      });
+      tb.style.background = '#2563eb'; tb.style.color = '#fff'; tb.style.borderColor = '#2563eb';
+      document.querySelectorAll('#recTableWrap .rec-card').forEach(function(card) {
+        var status = card.dataset.status || 'ok';
+        if (t.val === 'all') card.style.display = '';
+        else if (t.val === 'need') card.style.display = status === 'need' ? '' : 'none';
+        else card.style.display = status === 'ok' ? '' : 'none';
+      });
+    };
+    statusTabDiv.appendChild(tb);
+  });
+  mainArea.appendChild(statusTabDiv);
 
   // 테이블 컨테이너
   const tableWrap = document.createElement('div');
@@ -1205,6 +1255,9 @@ function renderRecommend(candidates) {
 
       // 카드
       const card = document.createElement('div');
+      card.className = 'rec-card';
+      card.dataset.name = prod.name.toLowerCase();
+      card.dataset.status = prod.opts.some(function(o){ return o.status==='need'; }) ? 'need' : 'ok';
       card.style.cssText = 'background:#fff;border:1px solid #fecaca;border-radius:10px;overflow:hidden;';
 
       // 헤더
@@ -1263,7 +1316,7 @@ function renderRecommend(candidates) {
       const thead = document.createElement('thead');
       const hrow = document.createElement('tr');
       hrow.style.cssText = 'background:#f9fafb;';
-      [{h:'옵션',align:'left'},{h:'현재고',align:'right'},{h:'7일판매',align:'right'},{h:'안정재고',align:'right'},{h:'부족수량',align:'right'},{h:'판단',align:'center'}].forEach(function(col) {
+      [{h:'옵션',align:'left'},{h:'현재고',align:'right'},{h:'일주일 판매량',align:'right'},{h:'안정재고',align:'right'},{h:'부족수량',align:'right'},{h:'판단',align:'center'}].forEach(function(col) {
         const th = document.createElement('th');
         th.textContent = col.h;
         th.style.cssText = 'padding:5px 8px;font-size:11px;color:#6b7280;font-weight:600;text-align:'+col.align+';border-bottom:1px solid #e5e7eb;white-space:nowrap;';
@@ -1304,7 +1357,7 @@ function renderRecommend(candidates) {
         tdStock.style.cssText = 'padding:4px 8px;text-align:right;font-family:monospace;font-size:11px;'+(o.stock===0&&o.isNeed?'color:#dc2626;font-weight:600;':o.isSoldOut?'color:#9ca3af;':'');
         tr.appendChild(tdStock);
 
-        // 7일판매
+        // 일주일 판매량
         const tdS7d = document.createElement('td');
         tdS7d.textContent = String(o.s7d);
         tdS7d.style.cssText = 'padding:4px 8px;text-align:right;font-family:monospace;font-size:11px;color:'+(o.isSoldOut?'#9ca3af':'#374151')+';';
@@ -1425,7 +1478,7 @@ function downloadRecExcel(mode, allCandidates) {
     {s:{r:0,c:36},e:{r:0,c:40}},{s:{r:0,c:41},e:{r:1,c:41}}
   ];
   XLSX.utils.book_append_sheet(wb, ws1, shName);
-  var allRows=[['상품코드','시즌','상품명','옵션명','현재고','7일판매량','안정재고','부족수량']];
+  var allRows=[['상품코드','시즌','상품명','옵션명','현재고','일주일 판매량량','안정재고','부족수량']];
   data.forEach(function(c) { allRows.push([c.code,c.season,c.product,c.opt,c.stock,c.s7d,c.criteria,c.shortage]); });
   var ws2 = XLSX.utils.aoa_to_sheet(allRows);
   XLSX.utils.book_append_sheet(wb, ws2, '전체데이터');
@@ -1557,7 +1610,7 @@ function renderResults(results) {
   html += '<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px 16px;margin-bottom:16px;">'
     + '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">'
     + '<span style="font-size:13px;color:#1e40af;font-weight:500;">안정재고 기준</span>'
-    + '<span style="font-size:13px;color:#3b82f6;">7일 판매량 ×</span>'
+    + '<span style="font-size:13px;color:#3b82f6;">일주일 판매량량 ×</span>'
     + '<input type="number" id="multiInput" value="' + globalMulti + '" min="0.5" max="10" step="0.5"'
     + ' style="width:60px;padding:4px 8px;border:1px solid #93c5fd;border-radius:6px;font-size:15px;font-weight:700;color:#1d4ed8;background:#fff;text-align:center;"'
     + ' oninput="onMultiInput(this.value)">'
@@ -1695,7 +1748,7 @@ function renderList() {
           <thead><tr>
             <th>옵션</th>
             <th class="right">현재고</th>
-            <th class="right">7일판매</th>
+            <th class="right">일주일 판매량</th>
             <th class="right">안정재고</th>
             <th class="right">부족수량</th>
             <th class="right">판단</th>
@@ -2008,7 +2061,7 @@ function downloadExcel(mode = 'need') {
       row[0] = `${yy}-${mm}-${dd}`;
       row[1] = item.product;
       row[2] = color;
-      row[41] = global7dLabel || `7일 판매량\n(${yy}.${mm}.${dd})`;
+      row[41] = global7dLabel || `일주일 판매량량\n(${yy}.${mm}.${dd})`;
 
       Object.entries(SIZE_MAP).forEach(([sz, cols]) => {
         const d = sizeData[sz] || {};
@@ -2053,7 +2106,7 @@ function downloadExcel(mode = 'need') {
   XLSX.utils.book_append_sheet(wb, ws1, sheetName);
 
   // ── 전체 데이터 시트 ──
-  const allRows = [['상품코드','상품명','옵션명','현재고','7일판매량','안정재고(7일×2)','부족수량','판단']];
+  const allRows = [['상품코드','상품명','옵션명','현재고','일주일 판매량량','안정재고(7일×2)','부족수량','판단']];
   allResults.forEach(item => {
     if (!item.options) {
       allRows.push([item.code, item.product, '-','-','-','-','-','미매칭']);
