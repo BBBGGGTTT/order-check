@@ -585,6 +585,61 @@ function updateMulti(val) {
   onMultiInput(val);
 }
 
+function loadFromFirestore() {
+  if (!window.firebaseDb) { console.log('Firebase 미연결'); return; }
+  var today = new Date();
+  var yy = today.getFullYear();
+  var mm = String(today.getMonth()+1).padStart(2,'0');
+  var dd = String(today.getDate()).padStart(2,'0');
+  var dateStr = yy + '-' + mm + '-' + dd;
+  var mainArea = document.getElementById('mainArea');
+  if (mainArea) mainArea.innerHTML = '<div class="empty-state"><div class="empty-icon">⏳</div><div class="empty-title">오늘 데이터 불러오는 중...</div><div class="empty-desc">'+dateStr+' 데이터를 Firebase에서 가져오고 있어요.</div></div>';
+  var q = window.firebaseQuery(window.firebaseCollection(window.firebaseDb, 'daily_sales'), window.firebaseWhere('date', '==', dateStr));
+  window.firebaseGetDocs(q).then(function(snapshot) {
+    if (snapshot.empty) {
+      console.log('오늘 Firebase 데이터 없음:', dateStr);
+      if (mainArea) mainArea.innerHTML = '<div class="empty-state"><div class="empty-icon">📂</div><div class="empty-title">오늘 데이터가 없어요</div><div class="empty-desc">판매량 파일을 업로드하거나 담당자가 파일을 올려주면 자동으로 표시돼요.</div></div>';
+      return;
+    }
+    console.log('Firebase에서 오늘 데이터 로드:', snapshot.size, '개 상품');
+    var rows = [];
+    snapshot.forEach(function(doc) {
+      var data = doc.data();
+      var optSales = data.optSales || {};
+      var opt7dSales = data.opt7dSales || {};
+      var optStock = data.optStock || {};
+      var optOrder = data.optOrder || Object.keys(optSales);
+      optOrder.forEach(function(opt) {
+        var row = {};
+        row['상품명'] = data.productName || '';
+        row['옵션명'] = opt;
+        row['당일 판매량'] = optSales[opt] || 0;
+        row['7일 판매량'] = opt7dSales[opt] || 0;
+        row['현재고'] = optStock[opt] || 0;
+        row['_code'] = data.code || '';
+        rows.push(row);
+      });
+    });
+    globalDf = rows;
+    global7dLabel = '일주일 판매량 (' + dateStr + ')';
+    window.firebaseGetDocs(window.firebaseCollection(window.firebaseDb, 'products')).then(function(prodSnap) {
+      globalSeason = {}; globalSoldOut = {};
+      prodSnap.forEach(function(doc) {
+        var data = doc.data();
+        if (data.season && data.productName) globalSeason[data.productName] = data.season;
+      });
+      var fileLoaded = document.getElementById('fileLoaded');
+      if (fileLoaded) { fileLoaded.style.display='block'; fileLoaded.textContent='✓ Firebase 데이터 로드됨 ('+dateStr+')'; }
+      var fileStatus = document.getElementById('fileStatus');
+      if (fileStatus) { fileStatus.textContent=rows.length.toLocaleString()+'행 로드됨'; fileStatus.className='status-pill active'; }
+      runAutoRecommend();
+    }).catch(function(err) { console.log('products 로드 실패:', err); runAutoRecommend(); });
+  }).catch(function(err) {
+    console.error('Firebase 로드 실패:', err);
+    if (mainArea) mainArea.innerHTML = '<div class="empty-state"><div class="empty-icon">📂</div><div class="empty-title">판매량 파일을 업로드해주세요</div></div>';
+  });
+}
+
 function switchMode(mode) {
   currentMode = mode;
   const checkSection = document.getElementById('checkSection');
@@ -1065,7 +1120,7 @@ function renderResults(results) {
     + '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">'
     + '<span style="font-size:13px;color:#1e40af;font-weight:500;">안정재고 기준</span>'
     + '<span style="font-size:13px;color:#3b82f6;">일주일 판매량 ×</span>'
-    + '<input type="number" id="multiInput" value="' + globalMulti + '" min="0.5" max="10" step="0.5"'
+    + '<input type="number" id="multiInput" value="' + String(globalMulti) + '" min="0.5" max="10" step="0.5"'
     + ' style="width:60px;padding:4px 8px;border:1px solid #93c5fd;border-radius:6px;font-size:15px;font-weight:700;color:#1d4ed8;background:#fff;text-align:center;"'
     + ' oninput="onMultiInput(this.value)">'
     + '<span style="font-size:12px;color:#60a5fa;">= 안정재고</span>'
@@ -1598,60 +1653,6 @@ function downloadExcel(mode = 'need') {
   setTimeout(function() { btn.disabled=false; btn.textContent='☁️ Firebase에 저장'; if(status) status.textContent='✓ 저장 완료!'; }, 8000);
 }
 
-function loadFromFirestore() {
-  if (!window.firebaseDb) { console.log('Firebase 미연결'); return; }
-  var today = new Date();
-  var yy = today.getFullYear();
-  var mm = String(today.getMonth()+1).padStart(2,'0');
-  var dd = String(today.getDate()).padStart(2,'0');
-  var dateStr = yy + '-' + mm + '-' + dd;
-  var mainArea = document.getElementById('mainArea');
-  if (mainArea) mainArea.innerHTML = '<div class="empty-state"><div class="empty-icon">⏳</div><div class="empty-title">오늘 데이터 불러오는 중...</div><div class="empty-desc">'+dateStr+' 데이터를 Firebase에서 가져오고 있어요.</div></div>';
-  var q = window.firebaseQuery(window.firebaseCollection(window.firebaseDb, 'daily_sales'), window.firebaseWhere('date', '==', dateStr));
-  window.firebaseGetDocs(q).then(function(snapshot) {
-    if (snapshot.empty) {
-      console.log('오늘 Firebase 데이터 없음:', dateStr);
-      if (mainArea) mainArea.innerHTML = '<div class="empty-state"><div class="empty-icon">📂</div><div class="empty-title">오늘 데이터가 없어요</div><div class="empty-desc">판매량 파일을 업로드하거나 담당자가 파일을 올려주면 자동으로 표시돼요.</div></div>';
-      return;
-    }
-    console.log('Firebase에서 오늘 데이터 로드:', snapshot.size, '개 상품');
-    var rows = [];
-    snapshot.forEach(function(doc) {
-      var data = doc.data();
-      var optSales = data.optSales || {};
-      var opt7dSales = data.opt7dSales || {};
-      var optStock = data.optStock || {};
-      var optOrder = data.optOrder || Object.keys(optSales);
-      optOrder.forEach(function(opt) {
-        var row = {};
-        row['상품명'] = data.productName || '';
-        row['옵션명'] = opt;
-        row['당일 판매량'] = optSales[opt] || 0;
-        row['7일 판매량'] = opt7dSales[opt] || 0;
-        row['현재고'] = optStock[opt] || 0;
-        row['_code'] = data.code || '';
-        rows.push(row);
-      });
-    });
-    globalDf = rows;
-    global7dLabel = '일주일 판매량 (' + dateStr + ')';
-    window.firebaseGetDocs(window.firebaseCollection(window.firebaseDb, 'products')).then(function(prodSnap) {
-      globalSeason = {}; globalSoldOut = {};
-      prodSnap.forEach(function(doc) {
-        var data = doc.data();
-        if (data.season && data.productName) globalSeason[data.productName] = data.season;
-      });
-      var fileLoaded = document.getElementById('fileLoaded');
-      if (fileLoaded) { fileLoaded.style.display='block'; fileLoaded.textContent='✓ Firebase 데이터 로드됨 ('+dateStr+')'; }
-      var fileStatus = document.getElementById('fileStatus');
-      if (fileStatus) { fileStatus.textContent=rows.length.toLocaleString()+'행 로드됨'; fileStatus.className='status-pill active'; }
-      runAutoRecommend();
-    }).catch(function(err) { console.log('products 로드 실패:', err); runAutoRecommend(); });
-  }).catch(function(err) {
-    console.error('Firebase 로드 실패:', err);
-    if (mainArea) mainArea.innerHTML = '<div class="empty-state"><div class="empty-icon">📂</div><div class="empty-title">판매량 파일을 업로드해주세요</div></div>';
-  });
-}
 
 function saveToFirestore(fileName) {
   if (!window.firebaseDb) { console.log('Firebase 미연결'); return; }
@@ -2302,7 +2303,7 @@ function renderResults(results) {
     + '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">'
     + '<span style="font-size:13px;color:#1e40af;font-weight:500;">안정재고 기준</span>'
     + '<span style="font-size:13px;color:#3b82f6;">일주일 판매량 ×</span>'
-    + '<input type="number" id="multiInput" value="' + globalMulti + '" min="0.5" max="10" step="0.5"'
+    + '<input type="number" id="multiInput" value="' + String(globalMulti) + '" min="0.5" max="10" step="0.5"'
     + ' style="width:60px;padding:4px 8px;border:1px solid #93c5fd;border-radius:6px;font-size:15px;font-weight:700;color:#1d4ed8;background:#fff;text-align:center;"'
     + ' oninput="onMultiInput(this.value)">'
     + '<span style="font-size:12px;color:#60a5fa;">= 안정재고</span>'
