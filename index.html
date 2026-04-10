@@ -783,7 +783,7 @@ function loadFile(file) {
       // 7일 판매량 컬럼명에서 날짜 범위 추출
       if (globalDf.length > 0) {
         const keys = Object.keys(globalDf[0]);
-        const col7d = keys.find(k => k.includes('판매량') || (k.includes('판매') && !k.includes('상품명')));
+        const col7d = keys.find(k => (k.includes('7일') || k.includes('9일') || k.includes('주')) && k.includes('판매')) || keys.find(k => k.includes('판매량') && !k.match(/\d{4}.*\d{2}.*\d{2}/));
         if (col7d) {
           const m = col7d.match(/\((\d+\.\d+\.\d+)~(\d+\.\d+\.\d+)\)/);
           if (m) {
@@ -904,7 +904,7 @@ function runAutoRecommend() {
   const keys = Object.keys(globalDf[0] || {});
   const colName = keys.find(k => k.includes('상품명')) || '';
   const colStock = keys.find(k => k.includes('현재고')) || '';
-  const col7d = keys.find(k => k.includes('판매량') || (k.includes('판매') && !k.includes('상품명'))) || '';
+  const col7d = keys.find(k => (k.includes('7일') || k.includes('9일') || k.includes('주')) && k.includes('판매')) || keys.find(k => k.includes('판매량') && !k.match(/\d{4}.*\d{2}.*\d{2}/)) || '';
   const colOpt = keys.find(k => k.includes('옵션명')) || '';
 
   if (!colName || !colStock || !col7d) return;
@@ -1456,7 +1456,7 @@ function analyze() {
   const keys = Object.keys(sampleRow);
   const colName = keys.find(k => k.includes('상품명')) || '';
   const colStock = keys.find(k => k.includes('현재고')) || '';
-  const col7d = keys.find(k => k.includes('판매량') || (k.includes('판매') && !k.includes('상품명'))) || '';
+  const col7d = keys.find(k => (k.includes('7일') || k.includes('9일') || k.includes('주')) && k.includes('판매')) || keys.find(k => k.includes('판매량') && !k.match(/\d{4}.*\d{2}.*\d{2}/)) || '';
   const colOpt = keys.find(k => k.includes('옵션명')) || '';
 
   if (!colName || !colStock || !col7d) {
