@@ -1256,7 +1256,7 @@ function renderRecommend(candidates) {
       // 카드
       const card = document.createElement('div');
       card.className = 'rec-card';
-      card.dataset.name = prod.name.toLowerCase();
+      card.dataset.name = (prod.name || '').toLowerCase();
       card.dataset.status = prod.opts.some(function(o){ return o.status==='need'; }) ? 'need' : 'ok';
       card.style.cssText = 'background:#fff;border:1px solid #fecaca;border-radius:10px;overflow:hidden;';
 
