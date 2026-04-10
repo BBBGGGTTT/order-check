@@ -533,7 +533,7 @@ function loadFile(file) {
       // 일주일 판매량 컬럼명에서 날짜 범위 추출
       if (globalDf.length > 0) {
         const keys = Object.keys(globalDf[0]);
-        const col7d = keys.find(k => k.includes('~') && k.includes('판매')) || keys.find(k => k.includes('판매량') && !k.match(/2026/));
+        const col7d = keys.find(k => k === '7일 판매량') || keys.find(k => k.includes('~') && k.includes('판매')) || keys.find(k => k.includes('판매량') && !k.match(/2026/));
         if (col7d) {
           const m = col7d.match(/\((\d+\.\d+\.\d+)~(\d+\.\d+\.\d+)\)/);
           if (m) {
@@ -707,7 +707,7 @@ function runAutoRecommend() {
   const keys = Object.keys(globalDf[0] || {});
   const colName = keys.find(k => k.includes('상품명')) || '';
   const colStock = keys.find(k => k.includes('현재고')) || '';
-  const col7d = keys.find(k => k.includes('~') && k.includes('판매')) || keys.find(k => k.includes('판매량') && !k.match(/2026/)) || '';
+  const col7d = keys.find(k => k === '7일 판매량') || keys.find(k => k.includes('~') && k.includes('판매')) || keys.find(k => k.includes('판매량') && !k.match(/2026/)) || '';
   const colOpt = keys.find(k => k.includes('옵션명')) || '';
 
   if (!colName || !colStock || !col7d) return;
@@ -1069,7 +1069,7 @@ function analyze() {
   const keys = Object.keys(sampleRow);
   const colName = keys.find(k => k.includes('상품명')) || '';
   const colStock = keys.find(k => k.includes('현재고')) || '';
-  const col7d = keys.find(k => k.includes('~') && k.includes('판매')) || keys.find(k => k.includes('판매량') && !k.match(/2026/)) || '';
+  const col7d = keys.find(k => k === '7일 판매량') || keys.find(k => k.includes('~') && k.includes('판매')) || keys.find(k => k.includes('판매량') && !k.match(/2026/)) || '';
   const colOpt = keys.find(k => k.includes('옵션명')) || '';
 
   if (!colName || !colStock || !col7d) {
@@ -1771,7 +1771,7 @@ function loadFile(file) {
       // 일주일 판매량 컬럼명에서 날짜 범위 추출
       if (globalDf.length > 0) {
         const keys = Object.keys(globalDf[0]);
-        const col7d = keys.find(k => k.includes('~') && k.includes('판매')) || keys.find(k => k.includes('판매량') && !k.match(/2026/));
+        const col7d = keys.find(k => k === '7일 판매량') || keys.find(k => k.includes('~') && k.includes('판매')) || keys.find(k => k.includes('판매량') && !k.match(/2026/));
         if (col7d) {
           const m = col7d.match(/\((\d+\.\d+\.\d+)~(\d+\.\d+\.\d+)\)/);
           if (m) {
@@ -1890,7 +1890,7 @@ function runAutoRecommend() {
   const keys = Object.keys(globalDf[0] || {});
   const colName = keys.find(k => k.includes('상품명')) || '';
   const colStock = keys.find(k => k.includes('현재고')) || '';
-  const col7d = keys.find(k => k.includes('~') && k.includes('판매')) || keys.find(k => k.includes('판매량') && !k.match(/2026/)) || '';
+  const col7d = keys.find(k => k === '7일 판매량') || keys.find(k => k.includes('~') && k.includes('판매')) || keys.find(k => k.includes('판매량') && !k.match(/2026/)) || '';
   const colOpt = keys.find(k => k.includes('옵션명')) || '';
 
   if (!colName || !colStock || !col7d) return;
@@ -2252,7 +2252,7 @@ function analyze() {
   const keys = Object.keys(sampleRow);
   const colName = keys.find(k => k.includes('상품명')) || '';
   const colStock = keys.find(k => k.includes('현재고')) || '';
-  const col7d = keys.find(k => k.includes('~') && k.includes('판매')) || keys.find(k => k.includes('판매량') && !k.match(/2026/)) || '';
+  const col7d = keys.find(k => k === '7일 판매량') || keys.find(k => k.includes('~') && k.includes('판매')) || keys.find(k => k.includes('판매량') && !k.match(/2026/)) || '';
   const colOpt = keys.find(k => k.includes('옵션명')) || '';
 
   if (!colName || !colStock || !col7d) {
