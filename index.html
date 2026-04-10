@@ -1007,56 +1007,28 @@ function renderRecommend(candidates) {
   candidates.forEach(function(c) { if (c.season) seasonKeys[c.season] = true; });
   const seasonList = Object.keys(seasonKeys).sort();
 
-  // 컨테이너
   mainArea.innerHTML = '';
+  recCurrentSeason = '';
 
-  // 통계
-  const statsDiv = document.createElement('div');
-  statsDiv.id = 'recStatsDiv';
-  statsDiv.style.cssText = 'display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px;';
-
-  function updateStats(filteredCandidates, seasonLabel) {
-    const needCount = filteredCandidates.filter(function(c) { return c.isNeed; }).length;
-    const totalNeed = candidates.filter(function(c) { return c.isNeed; }).length;
-    const label2 = seasonLabel ? seasonLabel + ' 발주필요' : '전체 발주필요';
-    statsDiv.innerHTML = '';
-    [
-      { label: '발주필요 옵션 (전체)', val: totalNeed, color: '#dc2626' },
-      { label: label2, val: needCount, color: '#16a34a' },
-      { label: '기준 배수', val: '×' + globalMulti, color: '#2563eb' }
-    ].forEach(function(s) {
-      const card = document.createElement('div');
-      card.style.cssText = 'background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:14px;';
-      card.innerHTML = '<div style="font-size:11px;color:#9ca3af;margin-bottom:6px;">'+s.label+'</div>'
-        + '<div style="font-size:26px;font-weight:700;color:'+s.color+';font-family:monospace;">'+s.val+'</div>';
-      statsDiv.appendChild(card);
-    });
-  }
-
-  updateStats(candidates, '');
-  mainArea.appendChild(statsDiv);
-
-  // 시즌 필터 탭
+  // ── 1. 시즌 필터 탭 ──
   const filterDiv = document.createElement('div');
   filterDiv.style.cssText = 'display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;align-items:center;';
-
-  recCurrentSeason = '';
 
   function applySeasonFilter(season, btn) {
     recCurrentSeason = season;
     filterDiv.querySelectorAll('button').forEach(function(b) {
       const bc = b.dataset.color || '#2563eb';
       const bg = b.dataset.bg || '#eff6ff';
-      if (b === btn) { b.style.background = bc; b.style.color = '#fff'; }
-      else { b.style.background = bg; b.style.color = bc; }
+      if (b === btn) { b.style.background = bc; b.style.color = '#fff'; b.style.borderColor = bc; }
+      else { b.style.background = bg; b.style.color = bc; b.style.borderColor = bc; }
     });
     const filtered = season ? candidates.filter(function(c) { return c.season === season; }) : candidates;
     updateStats(filtered, season);
     renderTable(filtered);
   }
 
+  const allNeedCount = candidates.filter(function(c) { return c.isNeed; }).length;
   const allBtn = document.createElement('button');
-  var allNeedCount = candidates.filter(function(c) { return c.isNeed; }).length;
   allBtn.textContent = '전체 (' + allNeedCount + ')';
   allBtn.dataset.color = '#2563eb';
   allBtn.dataset.bg = '#eff6ff';
@@ -1076,37 +1048,14 @@ function renderRecommend(candidates) {
     btn.onclick = (function(season, b) { return function() { applySeasonFilter(season, b); }; })(s, btn);
     filterDiv.appendChild(btn);
   });
-
   mainArea.appendChild(filterDiv);
 
-  // 툴바 (전체펼치기/접기 + 안정재고 + 엑셀저장)
-  const toolbarDiv = document.createElement('div');
-  toolbarDiv.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap;';
-
-  // 전체 펼치기
-  const expBtn = document.createElement('button');
-  expBtn.textContent = '﹢ 전체 펼치기';
-  expBtn.style.cssText = 'padding:6px 12px;font-size:12px;font-weight:500;border:1px solid #d1d5db;border-radius:6px;background:#fff;color:#6b7280;cursor:pointer;font-family:Noto Sans KR,sans-serif;';
-  expBtn.onclick = function() {
-    document.querySelectorAll('#recTableWrap .rec-body').forEach(function(el) { el.style.display = 'block'; });
-    document.querySelectorAll('#recTableWrap .rec-chev').forEach(function(el) { el.textContent = '▼'; });
-  };
-
-  // 전체 접기
-  const colBtn = document.createElement('button');
-  colBtn.textContent = '﹣ 전체 접기';
-  colBtn.style.cssText = 'padding:6px 12px;font-size:12px;font-weight:500;border:1px solid #d1d5db;border-radius:6px;background:#fff;color:#6b7280;cursor:pointer;font-family:Noto Sans KR,sans-serif;';
-  colBtn.onclick = function() {
-    document.querySelectorAll('#recTableWrap .rec-body').forEach(function(el) { el.style.display = 'none'; });
-    document.querySelectorAll('#recTableWrap .rec-chev').forEach(function(el) { el.textContent = '▶'; });
-  };
-
-  // 안정재고 배수
+  // ── 2. 안정재고 배수 ──
   const multiWrap = document.createElement('div');
-  multiWrap.style.cssText = 'display:flex;align-items:center;gap:6px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;padding:5px 10px;';
-  const multiLabel = document.createElement('span');
-  multiLabel.style.cssText = 'font-size:12px;color:#1e40af;font-weight:500;white-space:nowrap;';
-  multiLabel.textContent = '안정재고 ×';
+  multiWrap.style.cssText = 'display:flex;align-items:center;gap:8px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:8px 14px;margin-bottom:14px;';
+  multiWrap.innerHTML = '<span style="font-size:12px;color:#1e40af;font-weight:500;">안정재고 기준</span>'
+    + '<span style="font-size:12px;color:#374151;">일주일 판매량</span>'
+    + '<span style="font-size:12px;color:#374151;">×</span>';
   const multiInp = document.createElement('input');
   multiInp.type = 'number';
   multiInp.value = globalMulti;
@@ -1116,7 +1065,6 @@ function renderRecommend(candidates) {
     const v = parseFloat(this.value);
     if (!isNaN(v) && v > 0) {
       globalMulti = v;
-      // 발주확인 multiInput도 동기화
       const mi = document.getElementById('multiInput');
       const ms = document.getElementById('multiSlider');
       if (mi) mi.value = v;
@@ -1124,10 +1072,93 @@ function renderRecommend(candidates) {
       runAutoRecommend();
     }
   };
-  multiWrap.appendChild(multiLabel);
   multiWrap.appendChild(multiInp);
+  multiWrap.innerHTML += '<span style="font-size:12px;color:#374151;">= 안정재고</span>';
+  multiWrap.insertBefore(multiInp, multiWrap.lastChild);
+  mainArea.appendChild(multiWrap);
 
-  // 엑셀 저장 드롭다운
+  // ── 3. 통계 카드 ──
+  const statsDiv = document.createElement('div');
+  statsDiv.id = 'recStatsDiv';
+  statsDiv.style.cssText = 'display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px;';
+
+  function updateStats(filteredCandidates, seasonLabel) {
+    const needOpts = filteredCandidates.filter(function(c) { return c.isNeed; }).length;
+    const allNeedOpts = candidates.filter(function(c) { return c.isNeed; }).length;
+
+    // 상품 단위 계산
+    const prodMap = {};
+    filteredCandidates.forEach(function(c) { if (!prodMap[c.code]) prodMap[c.code] = { hasNeed: false, hasOk: false }; if (c.isNeed) prodMap[c.code].hasNeed = true; else prodMap[c.code].hasOk = true; });
+    const allProdMap = {};
+    candidates.forEach(function(c) { if (!allProdMap[c.code]) allProdMap[c.code] = true; });
+
+    const needProds = Object.values(prodMap).filter(function(p) { return p.hasNeed; }).length;
+    const okProds = Object.values(prodMap).filter(function(p) { return !p.hasNeed; }).length;
+    const totalProds = Object.keys(allProdMap).length;
+
+    statsDiv.innerHTML = '';
+    [
+      { label: '발주필요 옵션', val: allNeedOpts, color: '#dc2626' },
+      { label: '발주필요 상품', val: needProds, color: '#ea580c' },
+      { label: '재고 충분', val: okProds, color: '#16a34a' },
+      { label: '총 상품코드', val: totalProds, color: '#2563eb' }
+    ].forEach(function(s) {
+      const card = document.createElement('div');
+      card.style.cssText = 'background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:14px;';
+      card.innerHTML = '<div style="font-size:11px;color:#9ca3af;margin-bottom:6px;">'+s.label+'</div>'
+        + '<div style="font-size:24px;font-weight:700;color:'+s.color+';font-family:monospace;">'+s.val+'</div>';
+      statsDiv.appendChild(card);
+    });
+  }
+
+  updateStats(candidates, '');
+  mainArea.appendChild(statsDiv);
+
+  // ── 4. 툴바 (전체펼치기/접기 + 상태탭 + 엑셀저장) ──
+  const toolbarDiv = document.createElement('div');
+  toolbarDiv.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap;';
+
+  const expBtn = document.createElement('button');
+  expBtn.textContent = '﹢ 전체 펼치기';
+  expBtn.style.cssText = 'padding:6px 12px;font-size:12px;font-weight:500;border:1px solid #d1d5db;border-radius:6px;background:#fff;color:#6b7280;cursor:pointer;font-family:Noto Sans KR,sans-serif;';
+  expBtn.onclick = function() {
+    document.querySelectorAll('#recTableWrap .rec-body').forEach(function(el) { el.style.display = 'block'; });
+    document.querySelectorAll('#recTableWrap .rec-chev').forEach(function(el) { el.textContent = '▼'; });
+  };
+
+  const colBtn = document.createElement('button');
+  colBtn.textContent = '﹣ 전체 접기';
+  colBtn.style.cssText = 'padding:6px 12px;font-size:12px;font-weight:500;border:1px solid #d1d5db;border-radius:6px;background:#fff;color:#6b7280;cursor:pointer;font-family:Noto Sans KR,sans-serif;';
+  colBtn.onclick = function() {
+    document.querySelectorAll('#recTableWrap .rec-body').forEach(function(el) { el.style.display = 'none'; });
+    document.querySelectorAll('#recTableWrap .rec-chev').forEach(function(el) { el.textContent = '▶'; });
+  };
+
+  // 상태 탭 (전체/발주필요/재고충분)
+  const statusTabDiv = document.createElement('div');
+  statusTabDiv.style.cssText = 'display:flex;gap:4px;';
+  [
+    { label: '전체', val: 'all' },
+    { label: '발주필요', val: 'need' },
+    { label: '재고충분', val: 'ok' }
+  ].forEach(function(t) {
+    const tb = document.createElement('button');
+    tb.textContent = t.label;
+    tb.style.cssText = 'padding:5px 12px;font-size:12px;font-weight:600;border:1px solid '+(t.val==='all'?'#2563eb':'#e5e7eb')+';border-radius:20px;background:'+(t.val==='all'?'#2563eb':'#f9fafb')+';color:'+(t.val==='all'?'#fff':'#6b7280')+';cursor:pointer;font-family:Noto Sans KR,sans-serif;';
+    tb.onclick = function() {
+      statusTabDiv.querySelectorAll('button').forEach(function(b) {
+        b.style.background='#f9fafb'; b.style.color='#6b7280'; b.style.borderColor='#e5e7eb';
+      });
+      tb.style.background='#2563eb'; tb.style.color='#fff'; tb.style.borderColor='#2563eb';
+      document.querySelectorAll('#recTableWrap .rec-card').forEach(function(card) {
+        var status = card.dataset.status || 'ok';
+        card.style.display = (t.val==='all' || status===t.val) ? '' : 'none';
+      });
+    };
+    statusTabDiv.appendChild(tb);
+  });
+
+  // 엑셀 저장
   const dlWrap = document.createElement('div');
   dlWrap.style.cssText = 'position:relative;margin-left:auto;';
   const dlBtn = document.createElement('button');
@@ -1162,66 +1193,15 @@ function renderRecommend(candidates) {
   dlWrap.appendChild(dlBtn);
   dlWrap.appendChild(dlMenu);
 
-  // 검색란
-  const searchWrap = document.createElement('div');
-  searchWrap.style.cssText = 'display:flex;align-items:center;gap:6px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:5px 10px;';
-  const searchIcon = document.createElement('span');
-  searchIcon.textContent = '🔍';
-  searchIcon.style.cssText = 'font-size:13px;';
-  const searchInp = document.createElement('input');
-  searchInp.type = 'text';
-  searchInp.placeholder = '상품명 검색';
-  searchInp.style.cssText = 'border:none;outline:none;background:transparent;font-size:12px;color:#111827;width:120px;font-family:Noto Sans KR,sans-serif;';
-  searchInp.oninput = function() {
-    var q = this.value.trim().toLowerCase();
-    document.querySelectorAll('#recTableWrap .rec-card').forEach(function(card) {
-      var name = (card.dataset.name || '').toLowerCase();
-      card.style.display = (!q || name.includes(q)) ? '' : 'none';
-    });
-  };
-  searchWrap.appendChild(searchIcon);
-  searchWrap.appendChild(searchInp);
-
   toolbarDiv.appendChild(expBtn);
   toolbarDiv.appendChild(colBtn);
-  toolbarDiv.appendChild(searchWrap);
-  toolbarDiv.appendChild(multiWrap);
+  toolbarDiv.appendChild(statusTabDiv);
   toolbarDiv.appendChild(dlWrap);
   mainArea.appendChild(toolbarDiv);
 
-  // 발주필요/재고충분 탭
-  var recStatusTab = 'all';
-  const statusTabDiv = document.createElement('div');
-  statusTabDiv.style.cssText = 'display:flex;gap:6px;margin-bottom:12px;';
-  [
-    { label: '전체', val: 'all' },
-    { label: '발주필요', val: 'need' },
-    { label: '재고충분', val: 'ok' }
-  ].forEach(function(t) {
-    const tb = document.createElement('button');
-    tb.textContent = t.label;
-    tb.style.cssText = 'padding:5px 14px;font-size:12px;font-weight:600;border:1px solid #e5e7eb;border-radius:20px;background:' + (t.val==='all'?'#2563eb':'#f9fafb') + ';color:' + (t.val==='all'?'#fff':'#6b7280') + ';cursor:pointer;font-family:Noto Sans KR,sans-serif;';
-    tb.onclick = function() {
-      recStatusTab = t.val;
-      statusTabDiv.querySelectorAll('button').forEach(function(b) {
-        b.style.background = '#f9fafb'; b.style.color = '#6b7280'; b.style.borderColor = '#e5e7eb';
-      });
-      tb.style.background = '#2563eb'; tb.style.color = '#fff'; tb.style.borderColor = '#2563eb';
-      document.querySelectorAll('#recTableWrap .rec-card').forEach(function(card) {
-        var status = card.dataset.status || 'ok';
-        if (t.val === 'all') card.style.display = '';
-        else if (t.val === 'need') card.style.display = status === 'need' ? '' : 'none';
-        else card.style.display = status === 'ok' ? '' : 'none';
-      });
-    };
-    statusTabDiv.appendChild(tb);
-  });
-  mainArea.appendChild(statusTabDiv);
-
-  // 테이블 컨테이너
+  // ── 5. 테이블 ──
   const tableWrap = document.createElement('div');
   tableWrap.id = 'recTableWrap';
-  tableWrap.style.cssText = 'overflow-y:auto;';
   mainArea.appendChild(tableWrap);
 
   function renderTable(data) {
@@ -1409,729 +1389,3 @@ function renderRecommend(candidates) {
 
   renderTable(candidates);
 }
-
-function downloadRecExcel(mode, allCandidates) {
-  var today = new Date();
-  var yy = today.getFullYear();
-  var mm = String(today.getMonth()+1).padStart(2,'0');
-  var dd = String(today.getDate()).padStart(2,'0');
-  var dateStr = yy + mm + dd;
-  var shName = (document.getElementById('sheetName') && document.getElementById('sheetName').value.trim()) || dateStr;
-  shName = shName.slice(0,31);
-  var needOnly = allCandidates.filter(function(c) { return c.isNeed; });
-  var data = mode === 'current' ? (recCurrentSeason ? needOnly.filter(function(c) { return c.season === recCurrentSeason; }) : needOnly) : needOnly;
-  if (!data.length) { alert('저장할 데이터가 없어요!'); return; }
-  var SIZE_LOOKUP = {'S':'S','28':'S','Free':'S','M':'M','30':'M','L':'L','32':'L','XL':'XL','34':'XL','2XL':'2XL','36':'2XL','3XL':'3XL','38':'3XL','40':'40'};
-  var SIZE_MAP = {
-    'S':   {재고:7,  주문:8,  재단:9,  재고col:'H',  주문col:'I'},
-    'M':   {재고:12, 주문:13, 재단:14, 재고col:'M',  주문col:'N'},
-    'L':   {재고:17, 주문:18, 재단:19, 재고col:'R',  주문col:'S'},
-    'XL':  {재고:22, 주문:23, 재단:24, 재고col:'W',  주문col:'X'},
-    '2XL': {재고:27, 주문:28, 재단:29, 재고col:'AB', 주문col:'AC'},
-    '3XL': {재고:32, 주문:33, 재단:34, 재고col:'AG', 주문col:'AH'},
-    '40':  {재고:37, 주문:38, 재단:39, 재고col:'AL', 주문col:'AM'}
-  };
-  var TOTAL_COLS = 42;
-  function emptyRow() { return Array(TOTAL_COLS).fill(null); }
-  var row1 = emptyRow();
-  row1[0]='일자'; row1[1]='품명/품번'; row1[2]='색상'; row1[3]='총수량(절수)';
-  row1[6]='S(28),Free'; row1[11]='M (30)'; row1[16]='L (32)'; row1[21]='XL (34)';
-  row1[26]='2XL (36)'; row1[31]='3XL (38)'; row1[36]='40'; row1[41]='특이 사항';
-  var row2 = emptyRow();
-  row2[3]='발주'; row2[4]='재단'; row2[5]='절당\n재단수량';
-  [6,11,16,21,26,31,36].forEach(function(sc) {
-    ['발주','재고','주문','재단','입고'].forEach(function(h,i) { row2[sc+i]=h; });
-  });
-  var wsData = [row1, row2];
-  var prodMap = {};
-  data.forEach(function(c) {
-    if (!prodMap[c.code]) prodMap[c.code] = {product:c.product, colors:{}};
-    var parsed = parseColorSize(c.opt);
-    var color = parsed.color || c.opt;
-    var sz = SIZE_LOOKUP[parsed.size] || parsed.size;
-    if (!prodMap[c.code].colors[color]) prodMap[c.code].colors[color] = {};
-    prodMap[c.code].colors[color][sz] = {stock:c.stock, s7d:c.s7d};
-  });
-  Object.values(prodMap).forEach(function(prod) {
-    Object.entries(prod.colors).forEach(function(entry) {
-      var color = entry[0]; var sizeData = entry[1];
-      var row = emptyRow(); var rowNum = wsData.length + 1;
-      row[0]=yy+'-'+mm+'-'+dd; row[1]=prod.product; row[2]=color;
-      row[41]=global7dLabel || ('판매량 ('+yy+'.'+mm+'.'+dd+')');
-      Object.entries(SIZE_MAP).forEach(function(e) {
-        var sz=e[0]; var cols=e[1];
-        var d=sizeData[sz]||{}; var stock=d.stock||0; var s7d=d.s7d||0;
-        row[cols.재고]=stock; row[cols.주문]=s7d;
-        row[cols.재단]={f:cols.주문col+rowNum+'*2-'+cols.재고col+rowNum, v:Math.max(s7d*2-stock,0)};
-      });
-      wsData.push(row);
-    });
-  });
-  var wb = XLSX.utils.book_new();
-  var ws1 = XLSX.utils.aoa_to_sheet(wsData);
-  ws1['!merges']=[
-    {s:{r:0,c:0},e:{r:1,c:0}},{s:{r:0,c:1},e:{r:1,c:1}},
-    {s:{r:0,c:2},e:{r:1,c:2}},{s:{r:0,c:3},e:{r:0,c:5}},
-    {s:{r:0,c:6},e:{r:0,c:10}},{s:{r:0,c:11},e:{r:0,c:15}},
-    {s:{r:0,c:16},e:{r:0,c:20}},{s:{r:0,c:21},e:{r:0,c:25}},
-    {s:{r:0,c:26},e:{r:0,c:30}},{s:{r:0,c:31},e:{r:0,c:35}},
-    {s:{r:0,c:36},e:{r:0,c:40}},{s:{r:0,c:41},e:{r:1,c:41}}
-  ];
-  XLSX.utils.book_append_sheet(wb, ws1, shName);
-  var allRows=[['상품코드','시즌','상품명','옵션명','현재고','일주일 판매량량','안정재고','부족수량']];
-  data.forEach(function(c) { allRows.push([c.code,c.season,c.product,c.opt,c.stock,c.s7d,c.criteria,c.shortage]); });
-  var ws2 = XLSX.utils.aoa_to_sheet(allRows);
-  XLSX.utils.book_append_sheet(wb, ws2, '전체데이터');
-  var wbout = XLSX.write(wb,{bookType:'xlsx',type:'array'});
-  var blob = new Blob([wbout],{type:'application/octet-stream'});
-  var url = URL.createObjectURL(blob);
-  var a = document.createElement('a');
-  a.href=url;
-  var prefix = mode==='current' && recCurrentSeason ? '발주추천_'+recCurrentSeason+'_' : '발주추천_';
-  a.download = prefix+dateStr+'.xlsx';
-  document.body.appendChild(a); a.click();
-  setTimeout(function(){URL.revokeObjectURL(url);document.body.removeChild(a);},500);
-}
-
-function parseColorSize(optStr) {
-  let color = '', size = '';
-  const cm1 = optStr.match(/색상[:\s]*([^,\s\[\-\(]+)/);
-  const sm1 = optStr.match(/사이즈[:\s]*([^\s,\]\[\(]+)/);
-  if (cm1 && sm1) {
-    color = cm1[1].replace(/[()[\]\-]/g,'').trim();
-    size  = sm1[1].replace(/[()[\]\-]/g,'').trim();
-  } else {
-    const cm2 = optStr.match(/^-?([^(,\[]+)\(/);
-    const sm2 = optStr.match(/\[([^\]]+)\]/);
-    if (cm2 && sm2) {
-      color = cm2[1].replace(/^-+/,'').trim();
-      size  = sm2[1].trim();
-    } else {
-      color = optStr.split(',')[0].replace(/[-[\]]/g,'').trim();
-    }
-  }
-  return { color, size };
-}
-
-function extractCode(s) {
-  s = String(s).split('//')[0].trim();
-  // 코드만 단독 입력 (예: KJST2619)
-  if (/^[A-Z]{2,5}\d{4,}$/.test(s)) return s;
-  // 코드 포함된 문자열에서 추출
-  const m = s.match(/[A-Z]{2,5}\d{4,}/g);
-  return m ? m[m.length - 1] : null;
-}
-
-// ── 분석 ──
-function analyze() {
-  if (!globalDf) { alert('판매량 파일을 먼저 업로드해주세요.'); return; }
-  const inputVal = document.getElementById('productInput').value.trim();
-  if (!inputVal) { alert('상품 리스트를 입력해주세요.'); return; }
-  const lines = document.getElementById('productInput').value.trim().split('\n').map(l => l.trim()).filter(Boolean);
-
-  // 헤더 키 찾기 (공백/줄바꿈 포함)
-  const sampleRow = globalDf[0] || {};
-  const keys = Object.keys(sampleRow);
-  const colName = keys.find(k => k.includes('상품명')) || '';
-  const colStock = keys.find(k => k.includes('현재고')) || '';
-  const col7d = keys.find(k => k.includes('~') && k.includes('판매')) || keys.find(k => k.includes('판매량') && !k.match(/2026/)) || '';
-  const colOpt = keys.find(k => k.includes('옵션명')) || '';
-
-  if (!colName || !colStock || !col7d) {
-    alert('필요한 컬럼을 찾을 수 없습니다.\n컬럼 확인: ' + keys.slice(0,10).join(', '));
-    return;
-  }
-
-  // 코드 → 행 매핑
-  const codeMap = {};
-  globalDf.forEach(row => {
-    const code = extractCode(String(row[colName] || ''));
-    if (code) {
-      if (!codeMap[code]) codeMap[code] = [];
-      codeMap[code].push(row);
-    }
-  });
-
-  // 고유 코드 추출
-  const seenCodes = {};
-  lines.forEach(line => {
-    const code = extractCode(line);
-    if (code && !seenCodes[code]) seenCodes[code] = line;
-  });
-
-  // 판단
-  const results = [];
-  for (const [code, inputLine] of Object.entries(seenCodes)) {
-    const rows = codeMap[code];
-    if (!rows) {
-      results.push({ code, inputLine, product: inputLine, options: null, productStatus: 'unknown' });
-      continue;
-    }
-    const realName = String(rows[0][colName] || inputLine);
-    const options = rows.map(row => {
-      const stock = parseInt(row[colStock]) || 0;
-      const s7d = parseInt(row[col7d]) || 0;
-      const criteria = Math.ceil(s7d * globalMulti);
-      const shortage = criteria - stock;
-      const optName = String(row[colOpt] || '');
-      const soldOutKey = realName + '||' + optName;
-      const soldOut = globalSoldOut[soldOutKey] || '';
-      // 품절/일시품절이면 발주 판단 제외
-      const isSoldOut = soldOut === '품절' || soldOut === '일시품절';
-      const status = isSoldOut ? 'ok' : (stock < criteria ? 'need' : 'ok');
-      return { opt: optName, stock, s7d, criteria, shortage: isSoldOut ? 0 : (shortage > 0 ? shortage : 0), status, soldOut };
-    });
-    const season = globalSeason[realName] || '';
-    const hasNeed = options.some(o => o.status === 'need');
-    const hasOk = options.some(o => o.status === 'ok');
-    const productStatus = hasNeed && hasOk ? 'mixed' : hasNeed ? 'need' : 'ok';
-    results.push({ code, inputLine, product: realName, options, productStatus, season });
-  }
-
-  allResults = results;
-  renderResults(results);
-}
-
-// ── 렌더링 ──
-function renderResults(results) {
-  const need = results.filter(r => r.productStatus === 'need' || r.productStatus === 'mixed');
-  const ok   = results.filter(r => r.productStatus === 'ok');
-  const unk  = results.filter(r => r.productStatus === 'unknown');
-  const needOpts = results.flatMap(r => r.options || []).filter(o => o.status === 'need');
-
-  let html = '';
-
-  // 배수 조절 입력칸
-  const sliderTicks = [1,1.5,2,2.5,3,3.5,4,4.5,5].map(v => {
-    const label = v % 1 === 0 ? v : v.toFixed(1);
-    return '<span style="font-size:10px;color:#93c5fd;">' + label + '</span>';
-  }).join('');
-
-  html += '<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px 16px;margin-bottom:16px;">'
-    + '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">'
-    + '<span style="font-size:13px;color:#1e40af;font-weight:500;">안정재고 기준</span>'
-    + '<span style="font-size:13px;color:#3b82f6;">일주일 판매량량 ×</span>'
-    + '<input type="number" id="multiInput" value="' + globalMulti + '" min="0.5" max="10" step="0.5"'
-    + ' style="width:60px;padding:4px 8px;border:1px solid #93c5fd;border-radius:6px;font-size:15px;font-weight:700;color:#1d4ed8;background:#fff;text-align:center;"'
-    + ' oninput="onMultiInput(this.value)">'
-    + '<span style="font-size:12px;color:#60a5fa;">= 안정재고</span>'
-    + '<span style="font-size:11px;color:#93c5fd;margin-left:auto;">변경 시 자동 재계산</span>'
-    + '</div>'
-    + '<div style="display:flex;align-items:center;gap:8px;">'
-    + '<span style="font-size:11px;color:#93c5fd;min-width:20px;">×1</span>'
-    + '<input type="range" id="multiSlider" min="1" max="5" step="0.5" value="' + globalMulti + '"'
-    + ' style="flex:1;accent-color:#2563eb;" oninput="onMultiSlider(this.value)">'
-    + '<span style="font-size:11px;color:#93c5fd;min-width:20px;">×5</span>'
-    + '</div>'
-    + '<div style="display:flex;justify-content:space-between;margin-top:4px;padding:0 28px;">'
-    + sliderTicks
-    + '</div>'
-    + '</div>';
-
-  // 통계
-  html += `<div class="stats">
-    <div class="stat-card red"><div class="stat-label">발주 필요 옵션</div><div class="stat-num red">${needOpts.length}</div></div>
-    <div class="stat-card amber"><div class="stat-label">발주 필요 상품</div><div class="stat-num amber">${need.length}</div></div>
-    <div class="stat-card green"><div class="stat-label">재고 충분</div><div class="stat-num green">${ok.length}</div></div>
-    <div class="stat-card purple"><div class="stat-label">총 상품(코드)</div><div class="stat-num purple">${results.length}</div></div>
-  </div>`;
-
-  // 시즌 필터 + 추천 버튼
-  // 시즌 필터 + 추천 버튼 (DOM 직접 생성 방식)
-  const seasonDiv = document.createElement('div');
-  seasonDiv.style.cssText = 'display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;align-items:center;';
-
-  const seasonLabel = document.createElement('span');
-  seasonLabel.style.cssText = 'font-size:11px;color:#9ca3af;white-space:nowrap;';
-  seasonLabel.textContent = '시즌';
-  seasonDiv.appendChild(seasonLabel);
-
-  // 전체 버튼
-  const allBtn = document.createElement('button');
-  allBtn.id = 'season-btn-all';
-  allBtn.textContent = '전체';
-  allBtn.style.cssText = 'padding:5px 10px;font-size:11px;font-weight:600;border:1px solid #2563eb;border-radius:20px;background:#2563eb;color:#fff;cursor:pointer;white-space:nowrap;font-family:Noto Sans KR,sans-serif;';
-  allBtn.onclick = function() { setSeason('', allBtn); };
-  seasonDiv.appendChild(allBtn);
-
-  // 시즌별 버튼
-  const seasonKeys = {};
-  allResults.forEach(function(r) { if (r.season) seasonKeys[r.season] = true; });
-  Object.keys(seasonKeys).sort().forEach(function(s) {
-    const color = s.includes('(Y)') ? '#16a34a' : s.includes('(OFF)') ? '#d97706' : s.includes('(N)') ? '#9ca3af' : '#2563eb';
-    const bg = s.includes('(Y)') ? '#f0fdf4' : s.includes('(OFF)') ? '#fffbeb' : s.includes('(N)') ? '#f3f4f6' : '#eff6ff';
-    const btn = document.createElement('button');
-    btn.textContent = s;
-    btn.style.cssText = 'padding:5px 10px;font-size:11px;font-weight:600;border:1px solid '+color+';border-radius:20px;background:'+bg+';color:'+color+';cursor:pointer;white-space:nowrap;font-family:Noto Sans KR,sans-serif;';
-    btn.onclick = (function(season, b) { return function() { setSeason(season, b); }; })(s, btn);
-    seasonDiv.appendChild(btn);
-  });
-
-  // 발주 추천 버튼
-  const recBtn = document.createElement('button');
-  recBtn.textContent = '⭐ 발주 추천';
-  recBtn.style.cssText = 'margin-left:auto;padding:6px 14px;font-size:12px;font-weight:600;border:none;border-radius:6px;background:#2563eb;color:#fff;cursor:pointer;white-space:nowrap;font-family:Noto Sans KR,sans-serif;';
-  recBtn.onclick = showRecommend;
-  seasonDiv.appendChild(recBtn);
-
-  // seasonDiv는 innerHTML 설정 후 삽입
-    // 툴바
-  html += `<div class="toolbar">
-    <input class="search-input" id="searchBox" placeholder="🔍  상품명 또는 코드 검색..." oninput="filterResults()">
-    <button onclick="expandAll()" style="padding:6px 12px;font-size:12px;font-weight:500;border:1px solid var(--border2);border-radius:6px;background:var(--surface);color:var(--text2);cursor:pointer;white-space:nowrap;font-family:'Noto Sans KR',sans-serif;">﹢ 전체 펼치기</button>
-    <button onclick="collapseAll()" style="padding:6px 12px;font-size:12px;font-weight:500;border:1px solid var(--border2);border-radius:6px;background:var(--surface);color:var(--text2);cursor:pointer;white-space:nowrap;font-family:'Noto Sans KR',sans-serif;">﹣ 전체 접기</button>
-    <div class="filter-tabs">
-      <button class="ftab active" id="tab-all" onclick="setTab('all')">전체 <span style="opacity:.5">${results.length}</span></button>
-      <button class="ftab red" id="tab-need" onclick="setTab('need')">발주 필요 <span style="opacity:.5">${need.length}</span></button>
-      <button class="ftab green" id="tab-ok" onclick="setTab('ok')">재고 충분 <span style="opacity:.5">${ok.length}</span></button>
-    </div>
-    <div style="position:relative;margin-left:auto" id="dlWrapper">
-      <button class="dl-btn" onclick="toggleDlMenu()">⬇ 엑셀 저장 ▾</button>
-      <div id="dlMenu" style="display:none;position:absolute;right:0;top:36px;background:#ffffff;border:1px solid #d1d5db;border-radius:8px;overflow:hidden;z-index:50;min-width:180px;box-shadow:0 8px 24px rgba(0,0,0,0.15)">
-        <div onclick="downloadExcel('need')" style="padding:10px 16px;font-size:13px;cursor:pointer;color:var(--color-text-primary)" onmouseover="this.style.background='var(--color-background-secondary)'" onmouseout="this.style.background=''">📋 발주 필요만</div>
-        <div onclick="downloadExcel('ok')" style="padding:10px 16px;font-size:13px;cursor:pointer;color:var(--color-text-primary);border-top:0.5px solid var(--color-border-tertiary)" onmouseover="this.style.background='var(--color-background-secondary)'" onmouseout="this.style.background=''">📋 재고 충분만</div>
-        <div onclick="downloadExcel('all')" style="padding:10px 16px;font-size:13px;cursor:pointer;color:var(--color-text-primary);border-top:0.5px solid var(--color-border-tertiary)" onmouseover="this.style.background='var(--color-background-secondary)'" onmouseout="this.style.background=''">📋 전체 (발주필요 + 충분)</div>
-      </div>
-    </div>
-  </div>`;
-
-  html += `<div class="product-list" id="productList"></div>`;
-
-  document.getElementById('mainArea').innerHTML = html;
-  // 시즌 필터 div를 맨 앞에 삽입
-  document.getElementById('mainArea').insertBefore(seasonDiv, document.getElementById('mainArea').firstChild);
-  currentTab = 'all';
-  renderList();
-
-}
-
-function setTab(tab) {
-  currentTab = tab;
-  ['all','need','ok'].forEach(t => {
-    const el = document.getElementById('tab-' + t);
-    if (el) el.className = 'ftab' + (t === 'need' ? ' red' : t === 'ok' ? ' green' : '') + (tab === t ? ' active' : '');
-  });
-  renderList();
-}
-
-function filterResults() { renderList(); }
-
-function renderList() {
-  const q = (document.getElementById('searchBox')?.value || '').toLowerCase();
-  let items = allResults;
-  if (currentTab === 'need') items = items.filter(r => r.productStatus === 'need' || r.productStatus === 'mixed');
-  if (currentTab === 'ok')   items = items.filter(r => r.productStatus === 'ok');
-  if (currentSeason) items = items.filter(r => r.season === currentSeason);
-  if (q) items = items.filter(r => r.product.toLowerCase().includes(q) || r.code.toLowerCase().includes(q));
-
-  if (!items.length) {
-    document.getElementById('productList').innerHTML = '<div class="empty-state"><div class="empty-icon">🔍</div><div class="empty-title">결과 없음</div></div>';
-    return;
-  }
-
-  const html = items.map((item, idx) => {
-    const ps = item.productStatus;
-    let badgeText, badgeClass;
-    if (ps === 'need')    { badgeText = '발주 필요'; badgeClass = 'need'; }
-    else if (ps === 'mixed') { badgeText = '일부 발주'; badgeClass = 'mixed'; }
-    else if (ps === 'ok') { badgeText = '재고 충분'; badgeClass = 'ok'; }
-    else                  { badgeText = '미매칭'; badgeClass = 'ok'; }
-
-    const needOpts = item.options ? item.options.filter(o => o.status === 'need') : [];
-    const defaultOpen = (ps === 'need' || ps === 'mixed');
-
-    let tableHtml = '';
-    if (item.options && item.options.length) {
-      const showOpts = item.options;
-      tableHtml = `<div class="opt-table-wrap" id="opts-${idx}" style="display:${defaultOpen?'block':'none'}">
-        <table>
-          <thead><tr>
-            <th>옵션</th>
-            <th class="right">현재고</th>
-            <th class="right">일주일 판매량</th>
-            <th class="right">안정재고</th>
-            <th class="right">부족수량</th>
-            <th class="right">판단</th>
-          </tr></thead>
-          <tbody>${showOpts.map(o => `
-            <tr class="${o.status==='need'?'need-row':''}">
-              <td class="opt-name">${o.opt} ${o.soldOut==='품절'?'<span style="font-size:10px;padding:1px 6px;border-radius:10px;background:#fef2f2;color:#dc2626;font-weight:600;margin-left:4px;">품절</span>':o.soldOut==='일시품절'?'<span style="font-size:10px;padding:1px 6px;border-radius:10px;background:#fffbeb;color:#d97706;font-weight:600;margin-left:4px;">일시품절</span>':''}</td>
-              <td class="right">${o.stock}</td>
-              <td class="right">${o.s7d}</td>
-              <td class="right">${o.criteria}</td>
-              <td class="right ${o.status==='need'?'shortage-num':''}">${o.status==='need'?o.shortage:'-'}</td>
-              <td class="right"><span class="opt-badge-sm ${o.status}">${o.status==='need'?'발주필요':'충분'}</span></td>
-            </tr>`).join('')}
-          </tbody>
-        </table>
-      </div>`;
-    }
-
-    return `<div class="product-card ${ps==='need'?'need':ps==='mixed'?'mixed':''}">
-      <div class="product-header" onclick="toggleOpts(${idx})">
-        <span class="prod-code">${item.code}</span>
-        ${item.season ? `<span style="font-size:10px;padding:2px 8px;border-radius:10px;font-weight:600;margin-left:2px;${
-          item.season.includes('(Y)') ? 'background:#f0fdf4;color:#16a34a;' :
-          item.season.includes('(OFF)') ? 'background:#fffbeb;color:#d97706;' :
-          item.season.includes('(N)') ? 'background:#f3f4f6;color:#9ca3af;' :
-          'background:#eff6ff;color:#2563eb;'
-        }">${item.season}</span>` : ''}
-        <span class="prod-name">${item.product}</span>
-        ${needOpts.length ? `<span class="prod-need-count">▲ ${needOpts.length}옵션</span>` : ''}
-        <span class="prod-badge ${badgeClass}">${badgeText}</span>
-        <span class="chevron ${defaultOpen?'open':''}" id="chev-${idx}">▶</span>
-      </div>
-      ${tableHtml}
-    </div>`;
-  }).join('');
-
-  document.getElementById('productList').innerHTML = html;
-}
-
-function setSeason(season, btn) {
-  currentSeason = season;
-  // 버튼 스타일 업데이트
-  document.querySelectorAll('[id^="season-btn-"]').forEach(b => {
-    const bc = b.style.borderColor || '#2563eb';
-    b.style.background = b === btn ? bc : (b.style.backgroundColor || '#eff6ff');
-    b.style.color = b === btn ? '#fff' : bc;
-  });
-  if (btn) {
-    btn.style.background = btn.style.borderColor || '#2563eb';
-    btn.style.color = '#fff';
-  }
-  renderList();
-}
-
-function showRecommend() {
-  const candidates = [];
-  allResults.forEach(function(item) {
-    if (!item.options) return;
-    const isSeasonY = !!(item.season && item.season.includes('(Y)'));
-    item.options.forEach(function(o) {
-      if (o.status !== 'need') return;
-      candidates.push({
-        product: item.product,
-        code: item.code,
-        season: item.season || '',
-        opt: o.opt,
-        stock: o.stock,
-        s7d: o.s7d,
-        shortage: o.shortage,
-        isSeasonY: isSeasonY,
-        isZeroStock: o.stock === 0
-      });
-    });
-  });
-
-  candidates.sort(function(a, b) {
-    if (b.isSeasonY !== a.isSeasonY) return (b.isSeasonY ? 1 : 0) - (a.isSeasonY ? 1 : 0);
-    if (b.s7d !== a.s7d) return b.s7d - a.s7d;
-    if (b.shortage !== a.shortage) return b.shortage - a.shortage;
-    return (b.isZeroStock ? 1 : 0) - (a.isZeroStock ? 1 : 0);
-  });
-
-  const top = candidates.slice(0, 20);
-  if (!top.length) { alert('발주 추천 상품이 없어요!'); return; }
-
-  const existing = document.getElementById('recommendModal');
-  if (existing) existing.remove();
-
-  // 모달 생성
-  const modal = document.createElement('div');
-  modal.id = 'recommendModal';
-  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:200;display:flex;align-items:center;justify-content:center;';
-  modal.addEventListener('click', function(e) { if (e.target === modal) modal.remove(); });
-
-  const inner = document.createElement('div');
-  inner.style.cssText = 'background:#fff;border-radius:12px;width:900px;max-width:95vw;max-height:85vh;overflow:hidden;display:flex;flex-direction:column;';
-
-  // 헤더
-  const header = document.createElement('div');
-  header.style.cssText = 'padding:16px 20px;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;gap:10px;';
-
-  const title = document.createElement('span');
-  title.style.cssText = 'font-size:15px;font-weight:700;color:#111827;';
-  title.textContent = '⭐ 발주 추천 목록';
-
-  const subtitle = document.createElement('span');
-  subtitle.style.cssText = 'font-size:12px;color:#6b7280;';
-  subtitle.textContent = '시즌Y 우선 · 판매량 · 부족수량 · 현재고0 기준 상위 20개';
-
-  const closeBtn = document.createElement('button');
-  closeBtn.textContent = '닫기';
-  closeBtn.style.cssText = 'margin-left:auto;padding:4px 12px;border:1px solid #e5e7eb;border-radius:6px;background:#f9fafb;cursor:pointer;font-size:12px;font-family:Noto Sans KR,sans-serif;';
-  closeBtn.onclick = function() { modal.remove(); };
-
-  header.appendChild(title);
-  header.appendChild(subtitle);
-  header.appendChild(closeBtn);
-
-  // 테이블
-  const body = document.createElement('div');
-  body.style.cssText = 'overflow-y:auto;';
-
-  const table = document.createElement('table');
-  table.style.cssText = 'width:100%;border-collapse:collapse;';
-
-  const thead = document.createElement('thead');
-  const hrow = document.createElement('tr');
-  hrow.style.cssText = 'background:#f9fafb;';
-  ['#','코드','상품명','옵션','시즌','판매량','부족수량','현재고'].forEach(function(h, i) {
-    const th = document.createElement('th');
-    th.textContent = h;
-    th.style.cssText = 'padding:8px 10px;font-size:11px;color:#6b7280;font-weight:600;text-align:' + (i > 4 ? 'right' : i===4 ? 'center' : 'left') + ';';
-    hrow.appendChild(th);
-  });
-  thead.appendChild(hrow);
-
-  const tbody = document.createElement('tbody');
-  top.forEach(function(c, i) {
-    const seasonColor = c.isSeasonY ? '#16a34a' : '#9ca3af';
-    const seasonBg = c.isSeasonY ? '#f0fdf4' : '#f3f4f6';
-    const tr = document.createElement('tr');
-    tr.style.cssText = 'border-bottom:1px solid #f3f4f6;';
-
-    const cells = [
-      { text: String(i+1), align: 'left', color: '#6b7280' },
-      { text: c.code, align: 'left', color: '#2563eb', mono: true },
-      { text: c.product, align: 'left', color: '' },
-      { text: c.opt, align: 'left', color: '#6b7280' },
-      { text: c.season || '-', align: 'center', badge: true, seasonColor, seasonBg },
-      { text: String(c.s7d), align: 'right', mono: true },
-      { text: String(c.shortage), align: 'right', mono: true, color: '#dc2626', bold: true },
-      { text: String(c.stock), align: 'right', mono: true, color: c.stock===0 ? '#dc2626' : '', bold: c.stock===0 }
-    ];
-
-    cells.forEach(function(cell) {
-      const td = document.createElement('td');
-      td.style.cssText = 'padding:8px 10px;font-size:12px;text-align:' + cell.align + ';'
-        + (cell.mono ? 'font-family:monospace;' : '')
-        + (cell.color ? 'color:' + cell.color + ';' : '')
-        + (cell.bold ? 'font-weight:600;' : '');
-      if (cell.badge) {
-        const span = document.createElement('span');
-        span.textContent = cell.text;
-        span.style.cssText = 'font-size:10px;padding:2px 7px;border-radius:10px;background:' + cell.seasonBg + ';color:' + cell.seasonColor + ';font-weight:600;';
-        td.appendChild(span);
-      } else {
-        td.textContent = cell.text;
-      }
-      tr.appendChild(td);
-    });
-    tbody.appendChild(tr);
-  });
-
-  table.appendChild(thead);
-  table.appendChild(tbody);
-  body.appendChild(table);
-  inner.appendChild(header);
-  inner.appendChild(body);
-  modal.appendChild(inner);
-  document.body.appendChild(modal);
-}
-
-
-function expandAll() {
-  document.querySelectorAll('[id^="opts-"]').forEach(el => el.style.display = 'block');
-  document.querySelectorAll('[id^="chev-"]').forEach(el => el.className = 'chevron open');
-}
-
-function collapseAll() {
-  document.querySelectorAll('[id^="opts-"]').forEach(el => el.style.display = 'none');
-  document.querySelectorAll('[id^="chev-"]').forEach(el => el.className = 'chevron');
-}
-
-function toggleOpts(idx) {
-  const el = document.getElementById('opts-' + idx);
-  const chev = document.getElementById('chev-' + idx);
-  if (!el) return;
-  const open = el.style.display !== 'none';
-  el.style.display = open ? 'none' : 'block';
-  if (chev) chev.className = 'chevron' + (open ? '' : ' open');
-}
-
-// ── 엑셀 다운로드 ──
-function toggleDlMenu() {
-  const menu = document.getElementById('dlMenu');
-  menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
-  // 외부 클릭시 닫기
-  setTimeout(() => {
-    document.addEventListener('click', function closeDl(e) {
-      if (!document.getElementById('dlWrapper').contains(e.target)) {
-        menu.style.display = 'none';
-        document.removeEventListener('click', closeDl);
-      }
-    });
-  }, 0);
-}
-
-function downloadExcel(mode = 'need') {
-  if (!allResults.length) return;
-
-  const today = new Date();
-  const yy = today.getFullYear();
-  const mm = String(today.getMonth()+1).padStart(2,'0');
-  const dd = String(today.getDate()).padStart(2,'0');
-  const dateStr = yy + mm + dd;
-  const sheetName = (document.getElementById('sheetName')?.value?.trim() || dateStr).slice(0, 31);
-
-  const wb = XLSX.utils.book_new();
-
-  // ── 정확한 컬럼 매핑 (원본 템플릿 기준) ──
-  // 재고, 주문 입력 후 → 재단 컬럼에 =주문*2-재고 수식
-  // S/28/Free: H=재고(7),  I=주문(8),  J=재단(9)
-  // M/30:      M=재고(12), N=주문(13), O=재단(14)
-  // L/32:      R=재고(17), S=주문(18), T=재단(19)
-  // XL/34:     W=재고(22), X=주문(23), Y=재단(24)
-  // 2XL/36:    AB=재고(27),AC=주문(28),AD=재단(29)
-  // 3XL/38:    AG=재고(32),AH=주문(33),AI=재단(34)
-  // 40:        AL=재고(37),AM=주문(38),AN=재단(39)
-  // 조회용: 어떤 사이즈 표기든 컬럼 정보 반환
-  const SIZE_LOOKUP = {
-    'S':'S','28':'S','Free':'S',
-    'M':'M','30':'M',
-    'L':'L','32':'L',
-    'XL':'XL','34':'XL',
-    '2XL':'2XL','36':'2XL',
-    '3XL':'3XL','38':'3XL',
-    '40':'40',
-  };
-  // 루프용: 중복 없이 순서대로
-  const SIZE_MAP = {
-    'S':   { 재고: 7,  주문: 8,  재단: 9,  재고col: 'H',  주문col: 'I'  },
-    'M':   { 재고: 12, 주문: 13, 재단: 14, 재고col: 'M',  주문col: 'N'  },
-    'L':   { 재고: 17, 주문: 18, 재단: 19, 재고col: 'R',  주문col: 'S'  },
-    'XL':  { 재고: 22, 주문: 23, 재단: 24, 재고col: 'W',  주문col: 'X'  },
-    '2XL': { 재고: 27, 주문: 28, 재단: 29, 재고col: 'AB', 주문col: 'AC' },
-    '3XL': { 재고: 32, 주문: 33, 재단: 34, 재고col: 'AG', 주문col: 'AH' },
-    '40':  { 재고: 37, 주문: 38, 재단: 39, 재고col: 'AL', 주문col: 'AM' },
-  };
-  const TOTAL_COLS = 42;
-
-  function emptyRow() { return Array(TOTAL_COLS).fill(null); }
-
-  // ── 헤더 행1 ──
-  const row1 = emptyRow();
-  row1[0]  = '일자';
-  row1[1]  = '품명/품번';
-  row1[2]  = '색상';
-  row1[3]  = '총수량(절수)';
-  row1[6]  = 'S(28),Free';
-  row1[11] = 'M (30)';
-  row1[16] = 'L (32)';
-  row1[21] = 'XL (34)';
-  row1[26] = '2XL (36)';
-  row1[30] = '3XL (38)';
-  row1[35] = '40';
-  row1[41] = '특이 사항';
-
-  // ── 헤더 행2 ──
-  const row2 = emptyRow();
-  row2[3]  = '발주'; row2[4] = '재단'; row2[5] = '절당\n재단수량';
-  const subHeaders = ['발주','재고','주문','재단','입고'];
-  [6,11,16,21,26,30,35].forEach(startCol => {
-    subHeaders.forEach((h,i) => { row2[startCol+i] = h; });
-  });
-
-  const wsData = [row1, row2];
-
-  // ── 발주 필요 상품 데이터 ──
-  const needData = mode === 'all'
-    ? allResults.filter(r => r.options)
-    : mode === 'ok'
-    ? allResults.filter(r => r.productStatus === 'ok')
-    : allResults.filter(r => r.productStatus === 'need' || r.productStatus === 'mixed');
-
-  needData.forEach(item => {
-    if (!item.options) return;
-
-    // 색상별 그룹화
-      const colorMap = {};
-      item.options.forEach(o => {
-        const { color, size } = parseColorSize(o.opt);
-        const normalSize = SIZE_LOOKUP[size] || size; // 30→M, 32→L 등 정규화
-        if (!colorMap[color]) colorMap[color] = {};
-        colorMap[color][normalSize] = { stock: o.stock, s7d: o.s7d };
-      });
-    Object.entries(colorMap).forEach(([color, sizeData]) => {
-      const row = emptyRow();
-      const rowNum = wsData.length + 1; // 1-based 엑셀 행번호
-
-      row[0] = `${yy}-${mm}-${dd}`;
-      row[1] = item.product;
-      row[2] = color;
-      row[41] = global7dLabel || `일주일 판매량량\n(${yy}.${mm}.${dd})`;
-
-      Object.entries(SIZE_MAP).forEach(([sz, cols]) => {
-        const d = sizeData[sz] || {};
-        const stock = d.stock || 0;
-        const s7d   = d.s7d   || 0;
-        row[cols.재고] = stock;
-        row[cols.주문] = s7d;
-        // 재단 = 주문*2 - 재고 수식
-        row[cols.재단] = { f: `${cols.주문col}${rowNum}*2-${cols.재고col}${rowNum}`, v: Math.max(s7d*2-stock, 0) };
-      });
-
-      wsData.push(row);
-    });
-  });
-
-  const ws1 = XLSX.utils.aoa_to_sheet(wsData);
-
-  // 컬럼 너비 (원본 기준)
-  const colWidths = [
-    {wch:9.75},{wch:35},{wch:14},{wch:7.25},{wch:7.25},{wch:6},
-  ];
-  for(let i=0;i<36;i++) colWidths.push({wch:7.125});
-  colWidths.push({wch:9},{wch:37.75});
-  ws1['!cols'] = colWidths;
-
-  // 머지 셀 (원본 템플릿과 동일)
-  ws1['!merges'] = [
-    {s:{r:0,c:0},e:{r:1,c:0}},   // A1:A2
-    {s:{r:0,c:1},e:{r:1,c:1}},   // B1:B2
-    {s:{r:0,c:2},e:{r:1,c:2}},   // C1:C2
-    {s:{r:0,c:3},e:{r:0,c:5}},   // D1:F1
-    {s:{r:0,c:6},e:{r:0,c:10}},  // G1:K1
-    {s:{r:0,c:11},e:{r:0,c:15}}, // L1:P1
-    {s:{r:0,c:16},e:{r:0,c:20}}, // Q1:U1
-    {s:{r:0,c:21},e:{r:0,c:25}}, // V1:Z1
-    {s:{r:0,c:26},e:{r:0,c:30}}, // AA1:AE1
-    {s:{r:0,c:31},e:{r:0,c:35}}, // AF1:AJ1
-    {s:{r:0,c:36},e:{r:0,c:40}}, // AK1:AO1
-    {s:{r:0,c:41},e:{r:1,c:41}}, // AP1:AP2
-  ];
-
-  XLSX.utils.book_append_sheet(wb, ws1, sheetName);
-
-  // ── 전체 데이터 시트 ──
-  const allRows = [['상품코드','상품명','옵션명','현재고','일주일 판매량량','안정재고(7일×2)','부족수량','판단']];
-  allResults.forEach(item => {
-    if (!item.options) {
-      allRows.push([item.code, item.product, '-','-','-','-','-','미매칭']);
-    } else {
-      item.options.forEach(o => {
-        allRows.push([item.code, item.product, o.opt, o.stock, o.s7d, o.criteria,
-          o.status==='need'?o.shortage:0, o.status==='need'?'발주 필요':'재고 충분']);
-      });
-    }
-  });
-  const ws2 = XLSX.utils.aoa_to_sheet(allRows);
-  XLSX.utils.book_append_sheet(wb, ws2, '전체데이터');
-
-  const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-  const blob = new Blob([wbout], { type: 'application/octet-stream' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  const filePrefix = mode === 'all' ? '발주서_전체_' : mode === 'ok' ? '발주서_재고충분_' : '발주서_발주필요_';
-  a.download = filePrefix + dateStr + '.xlsx';
-  document.body.appendChild(a);
-  a.click();
-  setTimeout(() => { URL.revokeObjectURL(url); document.body.removeChild(a); }, 500);
-}
-</script>
-
-<script src="./xlsx.js"></script>
-</body></html>
