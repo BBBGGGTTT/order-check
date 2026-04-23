@@ -488,6 +488,7 @@ KJST2189
     <div style="display:flex;gap:4px;margin-bottom:0;">
       <button id="modeRecommend" onclick="switchMode('recommend')" style="flex:1;padding:8px;font-size:12px;font-weight:600;border:1px solid #2563eb;border-radius:6px 6px 0 0;background:#2563eb;color:#fff;cursor:pointer;font-family:'Noto Sans KR',sans-serif;">⭐ 자동 추천</button>
       <button id="modeCheck" onclick="switchMode('check')" style="flex:1;padding:8px;font-size:12px;font-weight:600;border:1px solid #e5e7eb;border-radius:6px 6px 0 0;background:#f9fafb;color:#6b7280;cursor:pointer;font-family:'Noto Sans KR',sans-serif;">🔍 발주 확인</button>
+      <button id="modeHistory" onclick="switchMode('history')" style="flex:1;padding:8px;font-size:12px;font-weight:600;border:1px solid #e5e7eb;border-radius:6px 6px 0 0;background:#f9fafb;color:#6b7280;cursor:pointer;font-family:'Noto Sans KR',sans-serif;">📅 저장 이력</button>
     </div>
 
     <!-- 실행 -->
@@ -497,6 +498,14 @@ KJST2189
       </button>
     </div>
 
+  </div>
+
+  <!-- 저장 이력 섹션 -->
+  <div id="historySection" style="flex: 1 1 0%; display: none;">
+    <div class="section-label">📅 Firebase 저장 이력</div>
+    <div id="historyList" style="margin-top:8px;">
+      <div style="text-align:center;color:var(--text3);padding:20px;font-size:13px;">탭 클릭 시 불러옵니다</div>
+    </div>
   </div>
 
   <!-- 메인 -->
@@ -628,27 +637,29 @@ function updateMulti(val) {
 function switchMode(mode) {
   currentMode = mode;
   const checkSection = document.getElementById('checkSection');
+  const historySection = document.getElementById('historySection');
   const runBtn = document.getElementById('runBtn');
   const modeRec = document.getElementById('modeRecommend');
   const modeChk = document.getElementById('modeCheck');
+  const modeHis = document.getElementById('modeHistory');
+
+  // 모든 탭 비활성화
+  [modeRec, modeChk, modeHis].forEach(btn => {
+    if (btn) { btn.style.background = '#f9fafb'; btn.style.color = '#6b7280'; btn.style.borderColor = '#e5e7eb'; }
+  });
+  if (checkSection) checkSection.style.display = 'none';
+  if (historySection) historySection.style.display = 'none';
+  if (runBtn) runBtn.parentElement.style.display = 'none';
 
   if (mode === 'recommend') {
-    if (checkSection) checkSection.style.display = 'none';
-    if (runBtn) runBtn.parentElement.style.display = 'none';
     modeRec.style.background = '#2563eb';
     modeRec.style.color = '#fff';
     modeRec.style.borderColor = '#2563eb';
-    modeChk.style.background = '#f9fafb';
-    modeChk.style.color = '#6b7280';
-    modeChk.style.borderColor = '#e5e7eb';
     if (globalDf) runAutoRecommend();
     else loadFromFirestore();
-  } else {
+  } else if (mode === 'check') {
     if (checkSection) checkSection.style.display = '';
     if (runBtn) runBtn.parentElement.style.display = '';
-    modeRec.style.background = '#f9fafb';
-    modeRec.style.color = '#6b7280';
-    modeRec.style.borderColor = '#e5e7eb';
     modeChk.style.background = '#2563eb';
     modeChk.style.color = '#fff';
     modeChk.style.borderColor = '#2563eb';
@@ -656,6 +667,13 @@ function switchMode(mode) {
     else {
       document.getElementById('mainArea').innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-title">발주 필요 여부 확인</div><div class="empty-desc">왼쪽에서 상품 리스트를 입력한 뒤 실행 버튼을 누르세요.</div></div>';
     }
+  } else if (mode === 'history') {
+    if (historySection) historySection.style.display = '';
+    modeHis.style.background = '#2563eb';
+    modeHis.style.color = '#fff';
+    modeHis.style.borderColor = '#2563eb';
+    document.getElementById('mainArea').innerHTML = '';
+    loadSavedDates();
   }
 }
 
@@ -1874,7 +1892,89 @@ function saveToFirestore(fileName) {
     var codes=Object.keys(productMap), total=codes.length;
     // writeBatch 방식: 최대 500건씩 묶어서 한번에 커밋
     var BATCH_SIZE=200; // daily_sales + products 2개씩이라 200*2=400 < 500 안전
-    async function saveAllBatches() {
+    function loadSavedDates() {
+  const listEl = document.getElementById('historyList');
+  if (!listEl) return;
+  if (!window.firebaseDb) {
+    listEl.innerHTML = '<div style="text-align:center;color:#ef4444;padding:20px;font-size:13px;">Firebase 연결 안됨</div>';
+    return;
+  }
+  listEl.innerHTML = '<div style="text-align:center;color:var(--text3);padding:20px;font-size:13px;">불러오는 중...</div>';
+
+  window.firebaseGetDocs(window.firebaseCollection(window.firebaseDb, 'daily_sales')).then(function(snapshot) {
+    const dateMap = {};
+    snapshot.forEach(function(doc) {
+      const data = doc.data();
+      const date = data.date;
+      if (!date) return;
+      if (!dateMap[date]) dateMap[date] = { count: 0, uploadedAt: data.uploadedAt || '', fileName: data.fileName || '' };
+      dateMap[date].count++;
+    });
+
+    const dates = Object.keys(dateMap).sort().reverse();
+    if (dates.length === 0) {
+      listEl.innerHTML = '<div style="text-align:center;color:var(--text3);padding:20px;font-size:13px;">저장된 데이터가 없습니다</div>';
+      return;
+    }
+
+    let html = '<div style="font-size:12px;">';
+    dates.forEach(function(date) {
+      const info = dateMap[date];
+      const uploadTime = info.uploadedAt ? new Date(info.uploadedAt).toLocaleString('ko-KR', {month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '-';
+      html += `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 8px;border-bottom:1px solid var(--border);gap:8px;">
+        <div>
+          <div style="font-weight:600;color:var(--text);font-size:13px;">📅 ${date}</div>
+          <div style="color:var(--text3);font-size:11px;margin-top:2px;">상품 ${info.count.toLocaleString()}개 · ${uploadTime}</div>
+          ${info.fileName ? `<div style="color:var(--text3);font-size:10px;margin-top:1px;">📁 ${info.fileName}</div>` : ''}
+        </div>
+        <button onclick="loadDateData('${date}')" style="padding:5px 10px;font-size:11px;background:#2563eb;color:#fff;border:none;border-radius:5px;cursor:pointer;white-space:nowrap;font-family:'Noto Sans KR',sans-serif;">불러오기</button>
+      </div>`;
+    });
+    html += '</div>';
+    listEl.innerHTML = html;
+  }).catch(function(e) {
+    listEl.innerHTML = '<div style="text-align:center;color:#ef4444;padding:20px;font-size:13px;">불러오기 실패: ' + e.message + '</div>';
+  });
+}
+
+function loadDateData(date) {
+  if (!window.firebaseDb) return;
+  const mainArea = document.getElementById('mainArea');
+  mainArea.innerHTML = '<div class="loading"><div class="spinner"></div><span>' + date + ' 데이터 불러오는 중...</span></div>';
+
+  const q = window.firebaseQuery(
+    window.firebaseCollection(window.firebaseDb, 'daily_sales'),
+    window.firebaseWhere('date', '==', date)
+  );
+  window.firebaseGetDocs(q).then(function(snapshot) {
+    const products = [];
+    snapshot.forEach(function(doc) { products.push(doc.data()); });
+    if (products.length === 0) {
+      mainArea.innerHTML = '<div class="empty-state"><div class="empty-icon">📭</div><div class="empty-title">데이터 없음</div><div class="empty-desc">' + date + ' 날짜의 데이터가 없습니다.</div></div>';
+      return;
+    }
+
+    // globalProductData 형식으로 변환해서 자동추천 실행
+    globalProductData = {};
+    globalSeason = {};
+    products.forEach(function(p) {
+      globalProductData[p.code] = p;
+      if (p.season) globalSeason[p.productName] = p.season;
+    });
+    globalDf = null; // 파일 데이터 없음 표시
+
+    // 안정재고 배수 가져오기
+    const mult = parseFloat(document.getElementById('multiplier')?.value || 2);
+    runAutoRecommendFromFirebase(globalProductData, mult);
+
+    // 탭을 자동추천으로 전환
+    switchMode('recommend');
+  }).catch(function(e) {
+    mainArea.innerHTML = '<div class="empty-state"><div class="empty-icon">❌</div><div class="empty-title">불러오기 실패</div><div class="empty-desc">' + e.message + '</div></div>';
+  });
+}
+
+async function saveAllBatches() {
       var completedBatches=0, totalBatches=Math.ceil(codes.length/BATCH_SIZE);
       for (var si=0; si<codes.length; si+=BATCH_SIZE) {
         var batch=window.firebaseWriteBatch(window.firebaseDb);
