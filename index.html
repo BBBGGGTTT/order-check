@@ -595,7 +595,7 @@ function loadFile(file) {
       document.getElementById('fileStatus').textContent = globalDf.length.toLocaleString() + '행 로드됨';
       document.getElementById('fileStatus').className = 'status-pill active';
       // 파일 로드 완료 → 자동 추천 실행
-      runAutoRecommend();
+      switchMode('recommend');
     } catch(err) {
       alert('파일 로드 실패: ' + err.message);
       prog.style.width = '0%';
@@ -1928,7 +1928,7 @@ function saveToFirestore(fileName) {
       html += '<div style="font-size:12px;color:var(--text3);margin-top:4px;">상품 <b>' + info.count.toLocaleString() + '</b>개 저장됨 &nbsp;·&nbsp; ' + uploadTime + '</div>';
       if (info.fileName) html += '<div style="font-size:11px;color:var(--text3);margin-top:2px;">📁 ' + info.fileName + '</div>';
       html += '</div>';
-      html += '<button onclick="loadDateData('' + date + '')" style="padding:8px 16px;font-size:12px;font-weight:600;background:#2563eb;color:#fff;border:none;border-radius:8px;cursor:pointer;white-space:nowrap;font-family:'Noto Sans KR',sans-serif;">불러오기 →</button>';
+      html += "<button onclick=\"loadDateData('" + date + "')\" style=\"padding:8px 16px;font-size:12px;font-weight:600;background:#2563eb;color:#fff;border:none;border-radius:8px;cursor:pointer;white-space:nowrap;\">불러오기 →</button>";
       html += '</div>';
     });
     html += '</div></div>';
@@ -2002,4 +2002,4 @@ async function saveAllBatches() {
 
 </script>
 
-</body></html>
+      html += '<button onclick="loadDateData(\'' + date + '\')" style="padding:8px 16px;font-size:12px;font-weight:600;background:#2563eb;color:#fff;border:none;border-radius:8px;cursor:pointer;white-space:nowrap;">불러오기 →</button>';>
