@@ -1870,19 +1870,20 @@ function saveToFirestore(fileName) {
       productMap[code].allOpts.push(opt);
       productMap[code].opts.push({opt:opt, sales:parseInt(row[todayCol])||0, sales7d:parseInt(row[col7d])||0, stock:parseInt(row[colStock])||0});
     });
-    var codes=Object.keys(productMap), saved=0;
+    var codes=Object.keys(productMap), saved=0, total=codes.length;
+    var chunkSize=50;
     function saveChunk(si) {
-      codes.slice(si,si+100).forEach(function(code) {
+      codes.slice(si,si+chunkSize).forEach(function(code) {
         var prod=productMap[code], os={}, o7={}, ost={}, oo=[];
         prod.opts.forEach(function(o){os[o.opt]=o.sales;o7[o.opt]=o.sales7d;ost[o.opt]=o.stock;oo.push(o.opt);});
         window.firebaseSetDoc(window.firebaseDoc(window.firebaseDb,'daily_sales',dateStr+'_'+code),
           {date:dateStr,code:code,productName:prod.name,fileName:fileName,uploadedAt:new Date().toISOString(),optSales:os,opt7dSales:o7,optStock:ost,optOrder:oo}
-        ).then(function(){saved++;if(saved===codes.length)console.log('저장 완료! 총',saved,'개');}).catch(function(e){console.error('저장 실패:',e);});
+        ).then(function(){saved++;if(saved===total)console.log('저장 완료! 총',saved,'개');}).catch(function(e){console.error('저장 실패:',e);});
         window.firebaseSetDoc(window.firebaseDoc(window.firebaseDb,'products',code),
           {code:code,productName:prod.name,allOpts:prod.allOpts,season:globalSeason[prod.name]||'',updatedAt:new Date().toISOString()}
         ).catch(function(e){console.error('products 실패:',e);});
       });
-      if (si+100<codes.length) setTimeout(function(){saveChunk(si+100);},500);
+      if (si+chunkSize<codes.length) setTimeout(function(){saveChunk(si+chunkSize);},1500);
     }
     saveChunk(0);
   } catch(e) { console.error('저장 오류:',e); }
