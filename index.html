@@ -52,7 +52,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
   window.firebaseWhere = where;
   window.firebaseReady = true;
   console.log('Firebase 연결 완료!');
-  document.dispatchEvent(new Event('firebaseReady'));
+  if (window.appReady) switchMode('recommend');
 </script>
 
 <style>
@@ -540,13 +540,8 @@ window.addEventListener('DOMContentLoaded', function() {
     uz.addEventListener('dragleave', function(e) { e.preventDefault(); e.stopPropagation(); uz.classList.remove('drag'); });
     uz.addEventListener('drop', function(e) { e.preventDefault(); e.stopPropagation(); uz.classList.remove('drag'); var f=e.dataTransfer.files[0]; if(f) loadFile(f); });
   }
-  // Firebase 준비될 때까지 폴링 (가장 안전한 방식)
-  var fbCheckInterval = setInterval(function() {
-    if (window.firebaseDb) {
-      clearInterval(fbCheckInterval);
-      switchMode('recommend');
-    }
-  }, 100);
+  window.appReady = true;
+  if (window.firebaseDb) switchMode('recommend');
 });
 
 function loadFile(file) {
