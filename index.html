@@ -540,11 +540,13 @@ window.addEventListener('DOMContentLoaded', function() {
     uz.addEventListener('dragleave', function(e) { e.preventDefault(); e.stopPropagation(); uz.classList.remove('drag'); });
     uz.addEventListener('drop', function(e) { e.preventDefault(); e.stopPropagation(); uz.classList.remove('drag'); var f=e.dataTransfer.files[0]; if(f) loadFile(f); });
   }
-  if (window.firebaseReady) {
-    switchMode('recommend');
-  } else {
-    document.addEventListener('firebaseReady', function() { switchMode('recommend'); }, { once: true });
-  }
+  // Firebase 준비될 때까지 폴링 (가장 안전한 방식)
+  var fbCheckInterval = setInterval(function() {
+    if (window.firebaseDb) {
+      clearInterval(fbCheckInterval);
+      switchMode('recommend');
+    }
+  }, 100);
 });
 
 function loadFile(file) {
