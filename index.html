@@ -50,9 +50,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
   window.firebaseDoc = firestoreDoc;
   window.firebaseWriteBatch = writeBatch;
   window.firebaseWhere = where;
-  window.firebaseReady = true;
   console.log('Firebase 연결 완료!');
-  if (window.appReady) switchMode('recommend');
 </script>
 
 <style>
@@ -500,16 +498,7 @@ KJST2189
       </button>
     </div>
 
-    <!-- 저장 이력 섹션 -->
-    <div id="historySection" style="display: none;">
-      <div class="section-label">📅 Firebase 저장 이력</div>
-      <div id="historyList">
-        <div style="text-align:center;color:var(--text3);padding:20px;font-size:13px;">탭 클릭 시 불러옵니다</div>
-      </div>
-    </div>
-
   </div>
-
 
   <!-- 메인 -->
   <div class="main" id="mainArea"><div class="empty-state"><div class="empty-icon">📂</div><div class="empty-title">판매량 파일을 업로드해주세요</div><div class="empty-desc">파일 업로드 후 자동으로 발주 추천 목록이 노출됩니다.</div></div></div>
@@ -540,8 +529,7 @@ window.addEventListener('DOMContentLoaded', function() {
     uz.addEventListener('dragleave', function(e) { e.preventDefault(); e.stopPropagation(); uz.classList.remove('drag'); });
     uz.addEventListener('drop', function(e) { e.preventDefault(); e.stopPropagation(); uz.classList.remove('drag'); var f=e.dataTransfer.files[0]; if(f) loadFile(f); });
   }
-  window.appReady = true;
-  if (window.firebaseDb) switchMode('recommend');
+  switchMode('recommend');
 });
 
 function loadFile(file) {
@@ -598,7 +586,7 @@ function loadFile(file) {
       document.getElementById('fileStatus').textContent = globalDf.length.toLocaleString() + '행 로드됨';
       document.getElementById('fileStatus').className = 'status-pill active';
       // 파일 로드 완료 → 자동 추천 실행
-      switchMode('recommend');
+      runAutoRecommend();
     } catch(err) {
       alert('파일 로드 실패: ' + err.message);
       prog.style.width = '0%';
@@ -641,18 +629,16 @@ function updateMulti(val) {
 function switchMode(mode) {
   currentMode = mode;
   const checkSection = document.getElementById('checkSection');
-  const historySection = document.getElementById('historySection');
   const runBtn = document.getElementById('runBtn');
   const modeRec = document.getElementById('modeRecommend');
   const modeChk = document.getElementById('modeCheck');
   const modeHis = document.getElementById('modeHistory');
 
-  // 모든 탭 비활성화
-  [modeRec, modeChk, modeHis].forEach(btn => {
+  // 모든 탭 초기화
+  [modeRec, modeChk, modeHis].forEach(function(btn) {
     if (btn) { btn.style.background = '#f9fafb'; btn.style.color = '#6b7280'; btn.style.borderColor = '#e5e7eb'; }
   });
   if (checkSection) checkSection.style.display = 'none';
-  if (historySection) historySection.style.display = 'none';
   if (runBtn) runBtn.parentElement.style.display = 'none';
 
   if (mode === 'recommend') {
@@ -1809,9 +1795,112 @@ function onClickSaveFirebase() {
   setTimeout(function() {
     if (btn) { btn.disabled=false; btn.textContent='☁️ Firebase에 저장'; }
     if (status) status.textContent='✓ 저장 완료!';
+    // 저장 이력 기록
+    if (window.firebaseDb && window.saveHistoryDate && window.saveHistoryCount) {
+      window.firebaseSetDoc(
+        window.firebaseDoc(window.firebaseDb, 'save_history', window.saveHistoryDate),
+        { date: window.saveHistoryDate, count: window.saveHistoryCount, fileName: window.saveHistoryFile || '', savedAt: new Date().toISOString() }
+      ).catch(function(){});
+    }
   }, 8000);
 }
 
+
+function loadSavedDates() {
+  var mainArea = document.getElementById('mainArea');
+  mainArea.innerHTML = '<div class="loading"><div class="spinner"></div><span>저장 이력 불러오는 중...</span></div>';
+  if (!window.firebaseDb) {
+    mainArea.innerHTML = '<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-title">Firebase 연결 안됨</div></div>';
+    return;
+  }
+  window.firebaseGetDocs(window.firebaseCollection(window.firebaseDb,'save_history')).then(function(snapshot) {
+    var dateMap = {};
+    snapshot.forEach(function(doc) {
+      var d = doc.data();
+      if (d.date) dateMap[d.date] = {count:d.count||0, uploadedAt:d.savedAt||'', fileName:d.fileName||''};
+    });
+    if (Object.keys(dateMap).length === 0) {
+      // save_history 없으면 daily_sales에서 날짜 추출 (최초 1회)
+      mainArea.innerHTML = '<div class="loading"><div class="spinner"></div><span>이전 데이터 분석 중... (최초 1회)</span></div>';
+      window.firebaseGetDocs(window.firebaseCollection(window.firebaseDb,'daily_sales')).then(function(snap) {
+        snap.forEach(function(doc) {
+          var d = doc.data();
+          if (!d.date) return;
+          if (!dateMap[d.date]) dateMap[d.date] = {count:0, uploadedAt:d.uploadedAt||'', fileName:d.fileName||''};
+          dateMap[d.date].count++;
+        });
+        Object.keys(dateMap).forEach(function(date) {
+          var info = dateMap[date];
+          window.firebaseSetDoc(window.firebaseDoc(window.firebaseDb,'save_history',date),
+            {date:date,count:info.count,fileName:info.fileName,savedAt:info.uploadedAt}
+          ).catch(function(){});
+        });
+        renderHistoryList(dateMap, mainArea);
+      }).catch(function(e) {
+        mainArea.innerHTML = '<div class="empty-state"><div class="empty-icon">❌</div><div class="empty-title">불러오기 실패</div><div class="empty-desc">'+e.message+'</div></div>';
+      });
+      return;
+    }
+    renderHistoryList(dateMap, mainArea);
+  }).catch(function(e) {
+    mainArea.innerHTML = '<div class="empty-state"><div class="empty-icon">❌</div><div class="empty-title">불러오기 실패</div><div class="empty-desc">'+e.message+'</div></div>';
+  });
+}
+
+function renderHistoryList(dateMap, mainArea) {
+  var dates = Object.keys(dateMap).sort().reverse();
+  if (dates.length === 0) {
+    mainArea.innerHTML = '<div class="empty-state"><div class="empty-icon">📭</div><div class="empty-title">저장된 이력이 없습니다</div></div>';
+    return;
+  }
+  var html = '<div style="padding:24px;">';
+  html += '<div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:16px;">📅 Firebase 저장 이력 <span style="font-size:12px;font-weight:400;color:var(--text3);">총 '+dates.length+'일치</span></div>';
+  html += '<div style="display:flex;flex-direction:column;gap:8px;">';
+  dates.forEach(function(date) {
+    var info = dateMap[date];
+    var t = info.uploadedAt ? new Date(info.uploadedAt).toLocaleString('ko-KR',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '-';
+    html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;">';
+    html += '<div><div style="font-size:15px;font-weight:700;color:var(--text);">📅 '+date+'</div>';
+    html += '<div style="font-size:12px;color:var(--text3);margin-top:4px;">상품 <b>'+info.count.toLocaleString()+'</b>개 &nbsp;·&nbsp; '+t+'</div>';
+    if (info.fileName) html += '<div style="font-size:11px;color:var(--text3);margin-top:2px;">📁 '+info.fileName+'</div>';
+    html += '</div>';
+    html += "<button onclick=\"loadDateData('" + date + "')\" style=\"padding:8px 16px;font-size:12px;font-weight:600;background:#2563eb;color:#fff;border:none;border-radius:8px;cursor:pointer;white-space:nowrap;\">불러오기 →</button>";
+    html += '</div>';
+  });
+  html += '</div></div>';
+  mainArea.innerHTML = html;
+}
+
+function loadDateData(date) {
+  if (!window.firebaseDb) return;
+  var mainArea = document.getElementById('mainArea');
+  mainArea.innerHTML = '<div class="loading"><div class="spinner"></div><span>'+date+' 데이터 불러오는 중...</span></div>';
+  var q = window.firebaseQuery(window.firebaseCollection(window.firebaseDb,'daily_sales'), window.firebaseWhere('date','==',date));
+  window.firebaseGetDocs(q).then(function(snapshot) {
+    if (snapshot.empty) {
+      mainArea.innerHTML = '<div class="empty-state"><div class="empty-icon">📭</div><div class="empty-title">데이터 없음</div></div>';
+      return;
+    }
+    var rows = [];
+    snapshot.forEach(function(doc) {
+      var data = doc.data();
+      var optSales=data.optSales||{}, opt7dSales=data.opt7dSales||{}, optStock=data.optStock||{};
+      var optOrder=data.optOrder||Object.keys(optSales);
+      optOrder.forEach(function(opt) {
+        rows.push({'상품명':data.productName||'','옵션명':opt,'당일 판매량':optSales[opt]||0,'7일 판매량':opt7dSales[opt]||0,'현재고':optStock[opt]||0,'_code':data.code||''});
+      });
+    });
+    globalDf = rows;
+    global7dLabel = '일주일 판매량 ('+date+')';
+    window.firebaseGetDocs(window.firebaseCollection(window.firebaseDb,'products')).then(function(prodSnap) {
+      globalSeason = {}; globalSoldOut = {};
+      prodSnap.forEach(function(doc) { var d=doc.data(); if(d.season&&d.productName) globalSeason[d.productName]=d.season; });
+      switchMode('recommend');
+    }).catch(function() { switchMode('recommend'); });
+  }).catch(function(e) {
+    mainArea.innerHTML = '<div class="empty-state"><div class="empty-icon">❌</div><div class="empty-title">불러오기 실패</div><div class="empty-desc">'+e.message+'</div></div>';
+  });
+}
 function loadFromFirestore() {
   if (!window.firebaseDb) { console.log('Firebase 미연결'); return; }
   var today = new Date();
@@ -1891,156 +1980,27 @@ function saveToFirestore(fileName) {
       productMap[code].allOpts.push(opt);
       productMap[code].opts.push({opt:opt, sales:parseInt(row[todayCol])||0, sales7d:parseInt(row[col7d])||0, stock:parseInt(row[colStock])||0});
     });
-    var codes=Object.keys(productMap), total=codes.length;
-    // writeBatch 방식: 최대 500건씩 묶어서 한번에 커밋
-    var BATCH_SIZE=200; // daily_sales + products 2개씩이라 200*2=400 < 500 안전
-    function loadSavedDates() {
-  const mainArea = document.getElementById('mainArea');
-  mainArea.innerHTML = '<div class="loading"><div class="spinner"></div><span>저장 이력 불러오는 중...</span></div>';
-
-  if (!window.firebaseDb) {
-    mainArea.innerHTML = '<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-title">Firebase 연결 안됨</div></div>';
-    return;
-  }
-
-  // save_history 먼저 읽고, 없으면 daily_sales에서 자동 생성
-  window.firebaseGetDocs(window.firebaseCollection(window.firebaseDb, 'save_history')).then(function(snapshot) {
-    const dateMap = {};
-    snapshot.forEach(function(doc) {
-      const data = doc.data();
-      if (data.date) dateMap[data.date] = { count: data.count || 0, uploadedAt: data.savedAt || '', fileName: data.fileName || '' };
-    });
-
-    if (Object.keys(dateMap).length === 0) {
-      // save_history 없음 → daily_sales에서 날짜 추출 후 save_history 자동 생성
-      mainArea.innerHTML = '<div class="loading"><div class="spinner"></div><span>이전 데이터 분석 중... (최초 1회)</span></div>';
-      window.firebaseGetDocs(window.firebaseCollection(window.firebaseDb, 'daily_sales')).then(function(snap) {
-        snap.forEach(function(doc) {
-          const data = doc.data();
-          const date = data.date;
-          if (!date) return;
-          if (!dateMap[date]) dateMap[date] = { count: 0, uploadedAt: data.uploadedAt || '', fileName: data.fileName || '' };
-          dateMap[date].count++;
-        });
-        // save_history에 자동 저장
-        Object.keys(dateMap).forEach(function(date) {
-          const info = dateMap[date];
-          window.firebaseSetDoc(
-            window.firebaseDoc(window.firebaseDb, 'save_history', date),
-            { date: date, count: info.count, fileName: info.fileName, savedAt: info.uploadedAt }
-          ).catch(function(){});
-        });
-        renderHistoryList(dateMap, mainArea);
-      }).catch(function(e) {
-        mainArea.innerHTML = '<div class="empty-state"><div class="empty-icon">❌</div><div class="empty-title">불러오기 실패</div><div class="empty-desc">' + e.message + '</div></div>';
+    var codes=Object.keys(productMap), saved=0;
+    function saveChunk(si) {
+      codes.slice(si,si+100).forEach(function(code) {
+        var prod=productMap[code], os={}, o7={}, ost={}, oo=[];
+        prod.opts.forEach(function(o){os[o.opt]=o.sales;o7[o.opt]=o.sales7d;ost[o.opt]=o.stock;oo.push(o.opt);});
+        window.firebaseSetDoc(window.firebaseDoc(window.firebaseDb,'daily_sales',dateStr+'_'+code),
+          {date:dateStr,code:code,productName:prod.name,fileName:fileName,uploadedAt:new Date().toISOString(),optSales:os,opt7dSales:o7,optStock:ost,optOrder:oo}
+        ).then(function(){saved++;if(saved===codes.length){console.log('저장 완료! 총',saved,'개');
+          window.firebaseSetDoc(window.firebaseDoc(window.firebaseDb,'save_history',dateStr),
+            {date:dateStr,count:saved,fileName:fileName,savedAt:new Date().toISOString()}
+          ).catch(function(){});}}).catch(function(e){console.error('저장 실패:',e);});
+        window.firebaseSetDoc(window.firebaseDoc(window.firebaseDb,'products',code),
+          {code:code,productName:prod.name,allOpts:prod.allOpts,season:globalSeason[prod.name]||'',updatedAt:new Date().toISOString()}
+        ).catch(function(e){console.error('products 실패:',e);});
       });
-      return;
+      if (si+100<codes.length) setTimeout(function(){saveChunk(si+100);},500);
     }
-
-    const dates = Object.keys(dateMap).sort().reverse();
-    if (dates.length === 0) {
-      mainArea.innerHTML = '<div class="empty-state"><div class="empty-icon">📭</div><div class="empty-title">저장된 이력이 없습니다</div><div class="empty-desc">파일 업로드 후 Firebase 저장 시 이력이 기록됩니다</div></div>';
-      return;
-    }
-
-    renderHistoryList(dateMap, mainArea);
-  }).catch(function(e) {
-    mainArea.innerHTML = '<div class="empty-state"><div class="empty-icon">❌</div><div class="empty-title">불러오기 실패</div><div class="empty-desc">' + e.message + '</div></div>';
-  });
-}
-
-function renderHistoryList(dateMap, mainArea) {
-  const dates = Object.keys(dateMap).sort().reverse();
-  if (dates.length === 0) {
-    mainArea.innerHTML = '<div class="empty-state"><div class="empty-icon">📭</div><div class="empty-title">저장된 이력이 없습니다</div></div>';
-    return;
-  }
-  let html = '<div style="padding:24px;">';
-  html += '<div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:16px;">📅 Firebase 저장 이력 <span style="font-size:12px;font-weight:400;color:var(--text3);">총 ' + dates.length + '일치</span></div>';
-  html += '<div style="display:flex;flex-direction:column;gap:8px;">';
-  dates.forEach(function(date) {
-    const info = dateMap[date];
-    const uploadTime = info.uploadedAt ? new Date(info.uploadedAt).toLocaleString('ko-KR', {year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '-';
-    html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;">';
-    html += '<div>';
-    html += '<div style="font-size:15px;font-weight:700;color:var(--text);">📅 ' + date + '</div>';
-    html += '<div style="font-size:12px;color:var(--text3);margin-top:4px;">상품 <b>' + info.count.toLocaleString() + '</b>개 저장됨 &nbsp;·&nbsp; ' + uploadTime + '</div>';
-    if (info.fileName) html += '<div style="font-size:11px;color:var(--text3);margin-top:2px;">📁 ' + info.fileName + '</div>';
-    html += '</div>';
-    html += '<button onclick="loadDateData(\'' + date + '\')" style="padding:8px 16px;font-size:12px;font-weight:600;background:#2563eb;color:#fff;border:none;border-radius:8px;cursor:pointer;white-space:nowrap;">불러오기 →</button>';
-    html += '</div>';
-  });
-  html += '</div></div>';
-  mainArea.innerHTML = html;
-}
-
-function loadDateData(date) {
-  if (!window.firebaseDb) return;
-  const mainArea = document.getElementById('mainArea');
-  mainArea.innerHTML = '<div class="loading"><div class="spinner"></div><span>' + date + ' 데이터 불러오는 중...</span></div>';
-
-  const q = window.firebaseQuery(
-    window.firebaseCollection(window.firebaseDb, 'daily_sales'),
-    window.firebaseWhere('date', '==', date)
-  );
-  window.firebaseGetDocs(q).then(function(snapshot) {
-    const products = [];
-    snapshot.forEach(function(doc) { products.push(doc.data()); });
-    if (products.length === 0) {
-      mainArea.innerHTML = '<div class="empty-state"><div class="empty-icon">📭</div><div class="empty-title">데이터 없음</div><div class="empty-desc">' + date + ' 날짜의 데이터가 없습니다.</div></div>';
-      return;
-    }
-
-    // globalProductData 형식으로 변환해서 자동추천 실행
-    globalProductData = {};
-    globalSeason = {};
-    products.forEach(function(p) {
-      globalProductData[p.code] = p;
-      if (p.season) globalSeason[p.productName] = p.season;
-    });
-    globalDf = null; // 파일 데이터 없음 표시
-
-    // 안정재고 배수 가져오기
-    const mult = parseFloat(document.getElementById('multiplier')?.value || 2);
-    runAutoRecommendFromFirebase(globalProductData, mult);
-
-    // 탭을 자동추천으로 전환
-    switchMode('recommend');
-  }).catch(function(e) {
-    mainArea.innerHTML = '<div class="empty-state"><div class="empty-icon">❌</div><div class="empty-title">불러오기 실패</div><div class="empty-desc">' + e.message + '</div></div>';
-  });
-}
-
-async function saveAllBatches() {
-      var completedBatches=0, totalBatches=Math.ceil(codes.length/BATCH_SIZE);
-      for (var si=0; si<codes.length; si+=BATCH_SIZE) {
-        var batch=window.firebaseWriteBatch(window.firebaseDb);
-        var chunk=codes.slice(si, si+BATCH_SIZE);
-        chunk.forEach(function(code) {
-          var prod=productMap[code], os={}, o7={}, ost={}, oo=[];
-          prod.opts.forEach(function(o){os[o.opt]=o.sales;o7[o.opt]=o.sales7d;ost[o.opt]=o.stock;oo.push(o.opt);});
-          var dsRef=window.firebaseDoc(window.firebaseDb,'daily_sales',dateStr+'_'+code);
-          batch.set(dsRef,{date:dateStr,code:code,productName:prod.name,fileName:fileName,uploadedAt:new Date().toISOString(),optSales:os,opt7dSales:o7,optStock:ost,optOrder:oo});
-          var prRef=window.firebaseDoc(window.firebaseDb,'products',code);
-          batch.set(prRef,{code:code,productName:prod.name,allOpts:prod.allOpts,season:globalSeason[prod.name]||'',updatedAt:new Date().toISOString()});
-        });
-        await batch.commit();
-        completedBatches++;
-        console.log('배치 저장 중...', completedBatches+'/'+totalBatches, '('+(completedBatches*BATCH_SIZE>total?total:completedBatches*BATCH_SIZE)+'/'+total+')');
-        // 배치 사이 딜레이
-        if (si+BATCH_SIZE<codes.length) await new Promise(function(r){setTimeout(r,1000);});
-      }
-      console.log('저장 완료! 총', total, '개');
-      // 저장 이력 요약 기록
-      window.firebaseSetDoc(
-        window.firebaseDoc(window.firebaseDb, 'save_history', dateStr),
-        { date: dateStr, count: total, fileName: fileName, savedAt: new Date().toISOString() }
-      ).catch(function(e){ console.error('이력 저장 실패:', e); });
-    }
-    saveAllBatches().catch(function(e){console.error('저장 오류:',e);});
+    saveChunk(0);
   } catch(e) { console.error('저장 오류:',e); }
 }
 
 </script>
 
-      html += '<button onclick="loadDateData(\'' + date + '\')" style="padding:8px 16px;font-size:12px;font-weight:600;background:#2563eb;color:#fff;border:none;border-radius:8px;cursor:pointer;white-space:nowrap;">불러오기 →</button>';>
+</body></html>
