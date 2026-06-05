@@ -2112,28 +2112,54 @@ function saveToFirestore(fileName) {
       productMap[code].allOpts.push(opt);
       productMap[code].opts.push({opt:opt, sales:parseInt(row[todayCol])||0, sales7d:parseInt(row[col7d])||0, stock:parseInt(row[colStock])||0});
     });
-    var codes=Object.keys(productMap), saved=0;
-    function saveChunk(si) {
-      codes.slice(si,si+100).forEach(function(code) {
-        var prod=productMap[code], os={}, o7={}, ost={}, oo=[], oso={};
-        prod.opts.forEach(function(o){
-          os[o.opt]=o.sales;o7[o.opt]=o.sales7d;ost[o.opt]=o.stock;oo.push(o.opt);
-          var sov = globalSoldOut[prod.name + '||' + o.opt];
-          if (sov === '품절' || sov === '일시품절') oso[o.opt] = sov;
+    var codes=Object.keys(productMap);
+    var BATCH_SIZE = 200;
+    var totalBatches = Math.ceil(codes.length / BATCH_SIZE);
+
+    async function saveAllBatches() {
+      var saved = 0;
+      for (var si = 0; si < codes.length; si += BATCH_SIZE) {
+        var batch = window.firebaseWriteBatch(window.firebaseDb);
+        var chunk = codes.slice(si, si + BATCH_SIZE);
+        chunk.forEach(function(code) {
+          var prod = productMap[code], os={}, o7={}, ost={}, oo=[], oso={};
+          prod.opts.forEach(function(o){
+            os[o.opt]=o.sales; o7[o.opt]=o.sales7d; ost[o.opt]=o.stock; oo.push(o.opt);
+            var sov = globalSoldOut[prod.name + '||' + o.opt];
+            if (sov === '품절' || sov === '일시품절') oso[o.opt] = sov;
+          });
+          batch.set(window.firebaseDoc(window.firebaseDb,'daily_sales',dateStr+'_'+code), {
+            date:dateStr, code:code, productName:prod.name, fileName:fileName,
+            uploadedAt:new Date().toISOString(),
+            optSales:os, opt7dSales:o7, optStock:ost, optOrder:oo
+          });
+          batch.set(window.firebaseDoc(window.firebaseDb,'products',code), {
+            code:code, productName:prod.name, allOpts:prod.allOpts,
+            season:globalSeason[prod.name]||'', optSoldOut:oso,
+            updatedAt:new Date().toISOString()
+          });
         });
-        window.firebaseSetDoc(window.firebaseDoc(window.firebaseDb,'daily_sales',dateStr+'_'+code),
-          {date:dateStr,code:code,productName:prod.name,fileName:fileName,uploadedAt:new Date().toISOString(),optSales:os,opt7dSales:o7,optStock:ost,optOrder:oo}
-        ).then(function(){saved++;if(saved===codes.length){console.log('저장 완료! 총',saved,'개');
-          window.firebaseSetDoc(window.firebaseDoc(window.firebaseDb,'save_history',dateStr),
-            {date:dateStr,count:saved,fileName:fileName,savedAt:new Date().toISOString()}
-          ).catch(function(){});}}).catch(function(e){console.error('저장 실패:',e);});
-        window.firebaseSetDoc(window.firebaseDoc(window.firebaseDb,'products',code),
-          {code:code,productName:prod.name,allOpts:prod.allOpts,season:globalSeason[prod.name]||'',optSoldOut:oso,updatedAt:new Date().toISOString()}
-        ).catch(function(e){console.error('products 실패:',e);});
-      });
-      if (si+100<codes.length) setTimeout(function(){saveChunk(si+100);},500);
+        try {
+          await batch.commit();
+          saved += chunk.length;
+          var batchNo = Math.floor(si/BATCH_SIZE) + 1;
+          console.log('배치 '+batchNo+'/'+totalBatches+' 완료 ('+saved+'/'+codes.length+')');
+        } catch(e) {
+          console.error('배치 실패 ('+(Math.floor(si/BATCH_SIZE)+1)+'/'+totalBatches+'):', e);
+          throw e;
+        }
+        if (si + BATCH_SIZE < codes.length) {
+          await new Promise(function(r){ setTimeout(r, 1000); });
+        }
+      }
+      try {
+        await window.firebaseSetDoc(window.firebaseDoc(window.firebaseDb,'save_history',dateStr), {
+          date:dateStr, count:saved, fileName:fileName, savedAt:new Date().toISOString()
+        });
+      } catch(e) { console.error('save_history 실패:', e); }
+      console.log('✓ 저장 완료! 총', saved, '개');
     }
-    saveChunk(0);
+    saveAllBatches().catch(function(e){ console.error('저장 중단:', e); });
   } catch(e) { console.error('저장 오류:',e); }
 }
 
