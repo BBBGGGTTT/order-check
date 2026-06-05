@@ -1745,17 +1745,26 @@ function renderList() {
             <th class="right">7일판매</th>
             <th class="right">안정재고</th>
             <th class="right">부족수량</th>
+            <th class="right">품절여부</th>
             <th class="right">판단</th>
           </tr></thead>
-          <tbody>${showOpts.map(o => `
+          <tbody>${showOpts.map(o => {
+            const sv = o.soldOut || '미품절';
+            let sColor = '#16a34a', sBg = '#f0fdf4', sBorder = '#bbf7d0';
+            if (sv === '일시품절') { sColor = '#d97706'; sBg = '#fffbeb'; sBorder = '#fde68a'; }
+            else if (sv === '품절') { sColor = '#6b7280'; sBg = '#f3f4f6'; sBorder = '#e5e7eb'; }
+            const soldOutBadge = `<span style="font-size:10px;padding:1px 6px;border-radius:10px;background:${sBg};color:${sColor};border:1px solid ${sBorder};font-weight:600;">${sv}</span>`;
+            return `
             <tr class="${o.status==='need'?'need-row':''}">
-              <td class="opt-name">${o.opt} ${o.soldOut==='품절'?'<span style="font-size:10px;padding:1px 6px;border-radius:10px;background:#fef2f2;color:#dc2626;font-weight:600;margin-left:4px;">품절</span>':o.soldOut==='일시품절'?'<span style="font-size:10px;padding:1px 6px;border-radius:10px;background:#fffbeb;color:#d97706;font-weight:600;margin-left:4px;">일시품절</span>':''}</td>
+              <td class="opt-name">${o.opt}</td>
               <td class="right">${o.stock}</td>
               <td class="right">${o.s7d}</td>
               <td class="right">${o.criteria}</td>
               <td class="right ${o.status==='need'?'shortage-num':''}">${o.status==='need'?o.shortage:'-'}</td>
+              <td class="right">${soldOutBadge}</td>
               <td class="right"><span class="opt-badge-sm ${o.status}">${o.status==='need'?'발주필요':'충분'}</span></td>
-            </tr>`).join('')}
+            </tr>`;
+          }).join('')}
           </tbody>
         </table>
       </div>`;
