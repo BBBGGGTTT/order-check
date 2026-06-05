@@ -769,16 +769,36 @@ function renderRecommend(candidates, totalCodes, needCodes) {
   const filterDiv = document.createElement('div');
   filterDiv.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;align-items:center;';
 
+  // 필터 상태
+  let recCurrentSeason = '';
+  let recZeroFilter = false;
+
+  function applyAllFilters() {
+    const seasonFiltered = recCurrentSeason
+      ? candidates.filter(function(c) { return c.season === recCurrentSeason; })
+      : candidates;
+    updateStats(seasonFiltered, recCurrentSeason);
+
+    let tableData = seasonFiltered;
+    if (recZeroFilter) {
+      const zeroCodes = {};
+      seasonFiltered.forEach(function(c) {
+        if (c.stock === 0 && c.s7d > 0) zeroCodes[c.code] = true;
+      });
+      tableData = seasonFiltered.filter(function(c) { return zeroCodes[c.code]; });
+    }
+    renderTable(tableData);
+  }
+
   function applySeasonFilter(season, btn) {
+    recCurrentSeason = season;
     filterDiv.querySelectorAll('button').forEach(function(b) {
       const bc = b.dataset.color || '#2563eb';
       const bg = b.dataset.bg || '#eff6ff';
       if (b === btn) { b.style.background = bc; b.style.color = '#fff'; }
       else { b.style.background = bg; b.style.color = bc; }
     });
-    const filtered = season ? candidates.filter(function(c) { return c.season === season; }) : candidates;
-    updateStats(filtered, season);
-    renderTable(filtered);
+    applyAllFilters();
   }
 
   const allBtn = document.createElement('button');
@@ -908,18 +928,35 @@ function renderRecommend(candidates, totalCodes, needCodes) {
     const filteredNeedCodesSet = {};
     filteredCandidates.forEach(function(c) { if (c.isNeed) filteredNeedCodesSet[c.code] = true; });
     const filteredNeedCodes = Object.keys(filteredNeedCodesSet).length;
-    const okCodes = Math.max(totalCodes - needCodes, 0);
+    const zeroSellingOpts = filteredCandidates.filter(function(c) { return c.stock === 0 && c.s7d > 0; }).length;
 
     statsDiv.innerHTML = '';
     [
-      { label: '발주 필요 옵션', val: filteredNeedOpts, color: '#dc2626' },
-      { label: '발주 필요 상품', val: filteredNeedCodes, color: '#d97706' },
-      { label: '재고 충분', val: okCodes, color: '#16a34a' },
-      { label: '총 상품(코드)', val: totalCodes, color: '#2563eb' }
+      { label: '발주 필요 옵션', val: filteredNeedOpts, color: '#dc2626', clickable: false },
+      { label: '발주 필요 상품', val: filteredNeedCodes, color: '#d97706', clickable: false },
+      { label: '재고 0 + 판매 있음', val: zeroSellingOpts, color: '#dc2626', clickable: true, key: 'zero' },
+      { label: '총 상품(코드)', val: totalCodes, color: '#2563eb', clickable: false }
     ].forEach(function(s) {
       const card = document.createElement('div');
-      card.style.cssText = 'background:#fff;border:1px solid #e5e7eb;border-top:3px solid '+s.color+';border-radius:8px;padding:14px;';
-      card.innerHTML = '<div style="font-size:11px;color:#9ca3af;margin-bottom:6px;">'+s.label+'</div>'
+      const isActive = s.key === 'zero' && recZeroFilter;
+      if (s.clickable) {
+        card.style.cssText = isActive
+          ? 'background:#fef2f2;border:2px solid '+s.color+';border-radius:8px;padding:13px;cursor:pointer;transition:all .15s;box-shadow:0 0 0 3px rgba(220,38,38,0.12);'
+          : 'background:#fff;border:1px solid #e5e7eb;border-top:3px solid '+s.color+';border-radius:8px;padding:14px;cursor:pointer;transition:all .15s;';
+        card.onmouseover = function() { if (!isActive) card.style.background = '#fafafa'; };
+        card.onmouseout = function() { if (!isActive) card.style.background = '#fff'; };
+        card.onclick = function() {
+          recZeroFilter = !recZeroFilter;
+          applyAllFilters();
+        };
+      } else {
+        card.style.cssText = 'background:#fff;border:1px solid #e5e7eb;border-top:3px solid '+s.color+';border-radius:8px;padding:14px;';
+      }
+      const labelExtra = s.clickable
+        ? (isActive ? ' <span style="color:'+s.color+';font-size:10px;font-weight:600;">✕ 필터 해제</span>'
+                    : ' <span style="color:#9ca3af;font-size:10px;">▸ 클릭 필터</span>')
+        : '';
+      card.innerHTML = '<div style="font-size:11px;color:#9ca3af;margin-bottom:6px;">'+s.label+labelExtra+'</div>'
         + '<div style="font-size:28px;font-weight:700;color:'+s.color+';font-family:monospace;">'+s.val+'</div>';
       statsDiv.appendChild(card);
     });
