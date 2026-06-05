@@ -774,11 +774,34 @@ function renderRecommend(candidates, totalCodes, needCodes) {
   let recZeroFilter = false;
   let recSortKey = '';   // '' | 'need' | 's7d' | 'shortage'
   let recSortDir = 'desc'; // 'desc' | 'asc'
+  let recMinNeedOpts = 0;
+  let recMinShortage = 0;
+  let recMinS7d = 0;
 
   function applyAllFilters() {
-    const seasonFiltered = recCurrentSeason
+    let seasonFiltered = recCurrentSeason
       ? candidates.filter(function(c) { return c.season === recCurrentSeason; })
       : candidates;
+
+    // 최소값 필터 (상품 단위 메트릭 기준)
+    if (recMinNeedOpts > 0 || recMinShortage > 0 || recMinS7d > 0) {
+      const prodMetrics = {};
+      seasonFiltered.forEach(function(c) {
+        if (!prodMetrics[c.code]) prodMetrics[c.code] = { need: 0, shortage: 0, s7d: 0 };
+        if (c.isNeed) prodMetrics[c.code].need++;
+        prodMetrics[c.code].shortage += c.shortage || 0;
+        prodMetrics[c.code].s7d += c.s7d || 0;
+      });
+      const okCodes = {};
+      Object.keys(prodMetrics).forEach(function(code) {
+        const m = prodMetrics[code];
+        if (m.need >= recMinNeedOpts && m.shortage >= recMinShortage && m.s7d >= recMinS7d) {
+          okCodes[code] = true;
+        }
+      });
+      seasonFiltered = seasonFiltered.filter(function(c) { return okCodes[c.code]; });
+    }
+
     updateStats(seasonFiltered, recCurrentSeason);
 
     let tableData = seasonFiltered;
@@ -890,6 +913,56 @@ function renderRecommend(candidates, totalCodes, needCodes) {
 
   // 초기 상태: 기본 정렬 (recSortKey='')
   mainArea.appendChild(sortRow);
+
+  // ───── 1-2. 최소값 필터 ─────
+  const minRow = document.createElement('div');
+  minRow.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:14px;flex-wrap:wrap;';
+
+  const minLbl = document.createElement('span');
+  minLbl.textContent = '최소';
+  minLbl.style.cssText = 'font-size:12px;color:#6b7280;font-weight:500;margin-right:4px;';
+  minRow.appendChild(minLbl);
+
+  function createMinBox(label, key, width) {
+    const box = document.createElement('div');
+    box.style.cssText = 'display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border:1px solid #d1d5db;border-radius:8px;background:#fff;';
+    const lbl = document.createElement('span');
+    lbl.textContent = label;
+    lbl.style.cssText = 'font-size:11px;color:#6b7280;';
+    const inp = document.createElement('input');
+    inp.type = 'number';
+    inp.min = '0';
+    inp.value = '0';
+    inp.style.cssText = 'width:'+width+'px;padding:2px 4px;font-size:12px;font-weight:600;border:1px solid #d1d5db;border-radius:4px;text-align:center;color:#111827;';
+    inp.oninput = function() {
+      const v = parseInt(this.value) || 0;
+      if (key === 'need') recMinNeedOpts = v;
+      else if (key === 'shortage') recMinShortage = v;
+      else if (key === 's7d') recMinS7d = v;
+      // 활성 시 박스 강조
+      box.style.borderColor = v > 0 ? '#2563eb' : '#d1d5db';
+      box.style.background = v > 0 ? '#eff6ff' : '#fff';
+      applyAllFilters();
+    };
+    const suffix = document.createElement('span');
+    suffix.textContent = '개 이상';
+    suffix.style.cssText = 'font-size:11px;color:#6b7280;';
+    box.appendChild(lbl);
+    box.appendChild(inp);
+    box.appendChild(suffix);
+    return box;
+  }
+
+  minRow.appendChild(createMinBox('발주필요 옵션', 'need', 48));
+  minRow.appendChild(createMinBox('부족수량', 'shortage', 60));
+  minRow.appendChild(createMinBox('7일 판매량', 's7d', 60));
+
+  const minHint = document.createElement('span');
+  minHint.textContent = '(0 = 해제)';
+  minHint.style.cssText = 'font-size:10px;color:#9ca3af;margin-left:auto;';
+  minRow.appendChild(minHint);
+
+  mainArea.appendChild(minRow);
 
   // ───── 2. 안정재고 배수 설정 (슬라이더) ─────
   const multiSection = document.createElement('div');
