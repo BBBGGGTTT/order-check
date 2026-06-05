@@ -1120,7 +1120,7 @@ function renderRecommend(candidates, totalCodes, needCodes) {
       const thead = document.createElement('thead');
       const hrow = document.createElement('tr');
       hrow.style.cssText = 'background:#f9fafb;';
-      [{h:'옵션',align:'left'},{h:'현재고',align:'right'},{h:'7일판매',align:'right'},{h:'안정재고',align:'right'},{h:'부족수량',align:'right'},{h:'판단',align:'center'}].forEach(function(col) {
+      [{h:'옵션',align:'left'},{h:'현재고',align:'right'},{h:'7일판매',align:'right'},{h:'안정재고',align:'right'},{h:'부족수량',align:'right'},{h:'품절여부',align:'center'},{h:'판단',align:'center'}].forEach(function(col) {
         const th = document.createElement('th');
         th.textContent = col.h;
         th.style.cssText = 'padding:5px 8px;font-size:11px;color:#6b7280;font-weight:600;text-align:'+col.align+';border-bottom:1px solid #e5e7eb;white-space:nowrap;';
@@ -1134,25 +1134,13 @@ function renderRecommend(candidates, totalCodes, needCodes) {
         const rowBg = o.isSoldOut ? '#f9fafb' : o.isNeed ? '#fff8f8' : '#ffffff';
         tr.style.cssText = 'border-bottom:1px solid #f3f4f6;background:'+rowBg+';height:28px;';
 
-        // 옵션명 + 상태 배지
+        // 옵션명 (배지는 새 품절여부 컬럼에서 표시)
         const tdOpt = document.createElement('td');
-        tdOpt.style.cssText = 'padding:7px 12px;';
         tdOpt.style.cssText = 'padding:4px 8px;';
         const optText = document.createElement('span');
         optText.textContent = o.opt;
         optText.style.cssText = 'font-size:11px;color:' + (o.isSoldOut?'#9ca3af':o.isNeed?'#374151':'#6b7280') + ';';
         tdOpt.appendChild(optText);
-        if (o.isSoldOut) {
-          const badge = document.createElement('span');
-          badge.textContent = o.soldOut;
-          badge.style.cssText = 'margin-left:6px;font-size:10px;padding:1px 6px;border-radius:10px;background:'+(o.soldOut==='품절'?'#fef2f2':'#fffbeb')+';color:'+(o.soldOut==='품절'?'#dc2626':'#d97706')+';font-weight:600;';
-          tdOpt.appendChild(badge);
-        } else if (!o.isNeed) {
-          const badge = document.createElement('span');
-          badge.textContent = '충분';
-          badge.style.cssText = 'margin-left:6px;font-size:10px;padding:1px 6px;border-radius:10px;background:#f0fdf4;color:#16a34a;font-weight:600;';
-          tdOpt.appendChild(badge);
-        }
         tr.appendChild(tdOpt);
 
         // 현재고
@@ -1178,6 +1166,19 @@ function renderRecommend(candidates, totalCodes, needCodes) {
         tdShort.textContent = o.isNeed ? String(o.shortage) : '-';
         tdShort.style.cssText = 'padding:4px 8px;text-align:right;font-family:monospace;font-size:11px;'+(o.isNeed?'color:#dc2626;font-weight:600;':'color:#9ca3af;');
         tr.appendChild(tdShort);
+
+        // 품절여부 (D열 값 표시: 미품절/일시품절/품절)
+        const tdSoldOut = document.createElement('td');
+        tdSoldOut.style.cssText = 'padding:4px 8px;text-align:center;';
+        const soldOutSpan = document.createElement('span');
+        const soldOutVal = o.soldOut || '미품절';
+        let sColor = '#16a34a', sBg = '#f0fdf4', sBorder = '#bbf7d0';
+        if (soldOutVal === '일시품절') { sColor = '#d97706'; sBg = '#fffbeb'; sBorder = '#fde68a'; }
+        else if (soldOutVal === '품절') { sColor = '#6b7280'; sBg = '#f3f4f6'; sBorder = '#e5e7eb'; }
+        soldOutSpan.textContent = soldOutVal;
+        soldOutSpan.style.cssText = 'font-size:10px;padding:1px 6px;border-radius:10px;background:'+sBg+';color:'+sColor+';border:1px solid '+sBorder+';font-weight:600;';
+        tdSoldOut.appendChild(soldOutSpan);
+        tr.appendChild(tdSoldOut);
 
         // 판단 배지
         const tdJudge = document.createElement('td');
