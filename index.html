@@ -2010,7 +2010,15 @@ function loadDateData(date) {
     global7dLabel = '일주일 판매량 ('+date+')';
     window.firebaseGetDocs(window.firebaseCollection(window.firebaseDb,'products')).then(function(prodSnap) {
       globalSeason = {}; globalSoldOut = {};
-      prodSnap.forEach(function(doc) { var d=doc.data(); if(d.season&&d.productName) globalSeason[d.productName]=d.season; });
+      prodSnap.forEach(function(doc) {
+        var d=doc.data();
+        if(d.season&&d.productName) globalSeason[d.productName]=d.season;
+        if(d.optSoldOut && d.productName) {
+          Object.keys(d.optSoldOut).forEach(function(opt) {
+            globalSoldOut[d.productName + '||' + opt] = d.optSoldOut[opt];
+          });
+        }
+      });
       switchMode('recommend');
     }).catch(function() { switchMode('recommend'); });
   }).catch(function(e) {
@@ -2049,7 +2057,15 @@ function loadFromFirestore() {
     global7dLabel = '일주일 판매량 (' + dateStr + ')';
     window.firebaseGetDocs(window.firebaseCollection(window.firebaseDb, 'products')).then(function(prodSnap) {
       globalSeason = {}; globalSoldOut = {};
-      prodSnap.forEach(function(doc) { var d=doc.data(); if(d.season && d.productName) globalSeason[d.productName]=d.season; });
+      prodSnap.forEach(function(doc) {
+        var d=doc.data();
+        if(d.season && d.productName) globalSeason[d.productName]=d.season;
+        if(d.optSoldOut && d.productName) {
+          Object.keys(d.optSoldOut).forEach(function(opt) {
+            globalSoldOut[d.productName + '||' + opt] = d.optSoldOut[opt];
+          });
+        }
+      });
       var fl = document.getElementById('fileLoaded');
       if (fl) { fl.style.display='block'; fl.textContent='✓ Firebase 데이터 로드됨 ('+dateStr+')'; }
       var fs = document.getElementById('fileStatus');
@@ -2099,8 +2115,12 @@ function saveToFirestore(fileName) {
     var codes=Object.keys(productMap), saved=0;
     function saveChunk(si) {
       codes.slice(si,si+100).forEach(function(code) {
-        var prod=productMap[code], os={}, o7={}, ost={}, oo=[];
-        prod.opts.forEach(function(o){os[o.opt]=o.sales;o7[o.opt]=o.sales7d;ost[o.opt]=o.stock;oo.push(o.opt);});
+        var prod=productMap[code], os={}, o7={}, ost={}, oo=[], oso={};
+        prod.opts.forEach(function(o){
+          os[o.opt]=o.sales;o7[o.opt]=o.sales7d;ost[o.opt]=o.stock;oo.push(o.opt);
+          var sov = globalSoldOut[prod.name + '||' + o.opt];
+          if (sov === '품절' || sov === '일시품절') oso[o.opt] = sov;
+        });
         window.firebaseSetDoc(window.firebaseDoc(window.firebaseDb,'daily_sales',dateStr+'_'+code),
           {date:dateStr,code:code,productName:prod.name,fileName:fileName,uploadedAt:new Date().toISOString(),optSales:os,opt7dSales:o7,optStock:ost,optOrder:oo}
         ).then(function(){saved++;if(saved===codes.length){console.log('저장 완료! 총',saved,'개');
@@ -2108,7 +2128,7 @@ function saveToFirestore(fileName) {
             {date:dateStr,count:saved,fileName:fileName,savedAt:new Date().toISOString()}
           ).catch(function(){});}}).catch(function(e){console.error('저장 실패:',e);});
         window.firebaseSetDoc(window.firebaseDoc(window.firebaseDb,'products',code),
-          {code:code,productName:prod.name,allOpts:prod.allOpts,season:globalSeason[prod.name]||'',updatedAt:new Date().toISOString()}
+          {code:code,productName:prod.name,allOpts:prod.allOpts,season:globalSeason[prod.name]||'',optSoldOut:oso,updatedAt:new Date().toISOString()}
         ).catch(function(e){console.error('products 실패:',e);});
       });
       if (si+100<codes.length) setTimeout(function(){saveChunk(si+100);},500);
