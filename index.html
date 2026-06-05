@@ -772,6 +772,8 @@ function renderRecommend(candidates, totalCodes, needCodes) {
   // 필터 상태
   let recCurrentSeason = '';
   let recZeroFilter = false;
+  let recSortKey = '';   // '' | 'need' | 's7d' | 'shortage'
+  let recSortDir = 'desc'; // 'desc' | 'asc'
 
   function applyAllFilters() {
     const seasonFiltered = recCurrentSeason
@@ -830,6 +832,64 @@ function renderRecommend(candidates, totalCodes, needCodes) {
   filterRow.appendChild(recBtn);
 
   mainArea.appendChild(filterRow);
+
+  // ───── 1-1. 정렬 ─────
+  const sortRow = document.createElement('div');
+  sortRow.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:14px;flex-wrap:wrap;';
+
+  const sortLbl = document.createElement('span');
+  sortLbl.textContent = '정렬';
+  sortLbl.style.cssText = 'font-size:12px;color:#6b7280;font-weight:500;margin-right:4px;';
+  sortRow.appendChild(sortLbl);
+
+  const sortBtns = [];
+  function styleSortBtn(btn, active, dir) {
+    if (active) {
+      btn.style.cssText = 'padding:5px 12px;font-size:12px;font-weight:600;border:1px solid #2563eb;border-radius:20px;background:#2563eb;color:#fff;cursor:pointer;white-space:nowrap;font-family:Noto Sans KR,sans-serif;display:inline-flex;align-items:center;gap:4px;';
+      btn.dataset.dirArrow = dir === 'desc' ? '▼' : '▲';
+    } else {
+      btn.style.cssText = 'padding:5px 12px;font-size:12px;font-weight:600;border:1px solid #d1d5db;border-radius:20px;background:#fff;color:#6b7280;cursor:pointer;white-space:nowrap;font-family:Noto Sans KR,sans-serif;';
+      btn.dataset.dirArrow = '';
+    }
+    btn.innerHTML = btn.dataset.label + (active ? ' <span style="font-size:9px;">' + (dir === 'desc' ? '▼' : '▲') + '</span>' : '');
+  }
+
+  function refreshSortButtons() {
+    sortBtns.forEach(function(b) {
+      const isActive = b.dataset.key === recSortKey;
+      styleSortBtn(b, isActive, isActive ? recSortDir : 'desc');
+    });
+  }
+
+  function handleSortClick(key) {
+    if (recSortKey === key) {
+      // 같은 버튼 → 방향 토글
+      recSortDir = recSortDir === 'desc' ? 'asc' : 'desc';
+    } else {
+      // 다른 버튼 → 기본 desc
+      recSortKey = key;
+      recSortDir = 'desc';
+    }
+    refreshSortButtons();
+    applyAllFilters();
+  }
+
+  [
+    { key: 'need', label: '발주필요 옵션' },
+    { key: 's7d', label: '7일 판매량' },
+    { key: 'shortage', label: '부족 수량' }
+  ].forEach(function(item) {
+    const btn = document.createElement('button');
+    btn.dataset.key = item.key;
+    btn.dataset.label = item.label;
+    styleSortBtn(btn, false, 'desc');
+    btn.onclick = (function(k) { return function() { handleSortClick(k); }; })(item.key);
+    sortRow.appendChild(btn);
+    sortBtns.push(btn);
+  });
+
+  // 초기 상태: 기본 정렬 (recSortKey='')
+  mainArea.appendChild(sortRow);
 
   // ───── 2. 안정재고 배수 설정 (슬라이더) ─────
   const multiSection = document.createElement('div');
@@ -1048,7 +1108,24 @@ function renderRecommend(candidates, totalCodes, needCodes) {
     const prods = Object.values(prodMap);
     prods.forEach(function(prod) {
       prod.opts.sort(function(a, b) { return a.rowIdx - b.rowIdx; });
+      // 정렬용 메트릭 미리 계산
+      prod._needCount = prod.opts.filter(function(o){ return o.isNeed; }).length;
+      prod._totalS7d = prod.opts.reduce(function(s,o){ return s + (o.s7d||0); }, 0);
+      prod._totalShortage = prod.opts.reduce(function(s,o){ return s + (o.shortage||0); }, 0);
     });
+
+    // 상품 카드 정렬 (사용자 선택 기준)
+    if (recSortKey) {
+      const dirMul = recSortDir === 'desc' ? -1 : 1;
+      const metricKey = recSortKey === 'need' ? '_needCount'
+                      : recSortKey === 's7d' ? '_totalS7d'
+                      : '_totalShortage';
+      prods.sort(function(a, b) {
+        const diff = (a[metricKey] - b[metricKey]) * dirMul;
+        if (diff !== 0) return diff;
+        return a.firstIdx - b.firstIdx; // tie-break: 원래 순서
+      });
+    }
 
     wrap.innerHTML = '';
     const list = document.createElement('div');
