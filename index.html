@@ -514,6 +514,8 @@ let currentSeason = '';
 let currentMode = 'recommend'; // recommend | check
 let allResults = [];
 let currentTab = 'all';
+let checkSortKey = '';   // '' | 'need' | 's7d' | 'shortage'
+let checkSortDir = 'desc';
 let recCurrentSeason = '';
 let firestoreSaved = false;
 
@@ -1593,6 +1595,58 @@ function renderResults(results) {
   seasonDiv.appendChild(recBtn);
 
   // seasonDiv는 innerHTML 설정 후 삽입
+
+  // 정렬 row (자동추천과 동일한 형식)
+  const sortDiv = document.createElement('div');
+  sortDiv.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:10px;flex-wrap:wrap;';
+
+  const sortLbl = document.createElement('span');
+  sortLbl.textContent = '정렬';
+  sortLbl.style.cssText = 'font-size:11px;color:#9ca3af;white-space:nowrap;margin-right:2px;';
+  sortDiv.appendChild(sortLbl);
+
+  const sortBtnList = [];
+  function styleCheckSortBtn(btn, active, dir) {
+    if (active) {
+      btn.style.cssText = 'padding:5px 10px;font-size:11px;font-weight:600;border:1px solid #2563eb;border-radius:20px;background:#2563eb;color:#fff;cursor:pointer;white-space:nowrap;font-family:Noto Sans KR,sans-serif;display:inline-flex;align-items:center;gap:4px;';
+    } else {
+      btn.style.cssText = 'padding:5px 10px;font-size:11px;font-weight:600;border:1px solid #d1d5db;border-radius:20px;background:#fff;color:#6b7280;cursor:pointer;white-space:nowrap;font-family:Noto Sans KR,sans-serif;';
+    }
+    btn.innerHTML = btn.dataset.label + (active ? ' <span style="font-size:9px;">' + (dir === 'desc' ? '▼' : '▲') + '</span>' : '');
+  }
+
+  function refreshCheckSortBtns() {
+    sortBtnList.forEach(function(b) {
+      const isActive = b.dataset.key === checkSortKey;
+      styleCheckSortBtn(b, isActive, isActive ? checkSortDir : 'desc');
+    });
+  }
+
+  function handleCheckSortClick(key) {
+    if (checkSortKey === key) {
+      checkSortDir = checkSortDir === 'desc' ? 'asc' : 'desc';
+    } else {
+      checkSortKey = key;
+      checkSortDir = 'desc';
+    }
+    refreshCheckSortBtns();
+    renderList();
+  }
+
+  [
+    { key: 'need', label: '발주필요 옵션' },
+    { key: 's7d', label: '7일 판매량' },
+    { key: 'shortage', label: '부족 수량' }
+  ].forEach(function(item) {
+    const btn = document.createElement('button');
+    btn.dataset.key = item.key;
+    btn.dataset.label = item.label;
+    styleCheckSortBtn(btn, false, 'desc');
+    btn.onclick = (function(k) { return function() { handleCheckSortClick(k); }; })(item.key);
+    sortDiv.appendChild(btn);
+    sortBtnList.push(btn);
+  });
+
     // 툴바
   html += `<div class="toolbar">
     <input class="search-input" id="searchBox" placeholder="🔍  상품명 또는 코드 검색..." oninput="filterResults()">
@@ -1618,6 +1672,8 @@ function renderResults(results) {
   document.getElementById('mainArea').innerHTML = html;
   // 시즌 필터 div를 맨 앞에 삽입
   document.getElementById('mainArea').insertBefore(seasonDiv, document.getElementById('mainArea').firstChild);
+  // 정렬 div를 시즌 다음에 삽입
+  document.getElementById('mainArea').insertBefore(sortDiv, seasonDiv.nextSibling);
   currentTab = 'all';
   renderList();
 
@@ -1642,6 +1698,26 @@ function renderList() {
   if (currentSeason) items = items.filter(r => r.season === currentSeason);
   if (q) items = items.filter(r => r.product.toLowerCase().includes(q) || r.code.toLowerCase().includes(q));
 
+  // 정렬 적용 (사용자 선택 시)
+  if (checkSortKey) {
+    const dirMul = checkSortDir === 'desc' ? -1 : 1;
+    items = items.slice().sort(function(a, b) {
+      const ao = a.options || [], bo = b.options || [];
+      let av = 0, bv = 0;
+      if (checkSortKey === 'need') {
+        av = ao.filter(o => o.status === 'need').length;
+        bv = bo.filter(o => o.status === 'need').length;
+      } else if (checkSortKey === 's7d') {
+        av = ao.reduce((s,o) => s + (o.s7d||0), 0);
+        bv = bo.reduce((s,o) => s + (o.s7d||0), 0);
+      } else if (checkSortKey === 'shortage') {
+        av = ao.reduce((s,o) => s + (o.shortage||0), 0);
+        bv = bo.reduce((s,o) => s + (o.shortage||0), 0);
+      }
+      return (av - bv) * dirMul;
+    });
+  }
+
   if (!items.length) {
     document.getElementById('productList').innerHTML = '<div class="empty-state"><div class="empty-icon">🔍</div><div class="empty-title">결과 없음</div></div>';
     return;
@@ -1656,7 +1732,7 @@ function renderList() {
     else                  { badgeText = '미매칭'; badgeClass = 'ok'; }
 
     const needOpts = item.options ? item.options.filter(o => o.status === 'need') : [];
-    const defaultOpen = (ps === 'need' || ps === 'mixed');
+    const defaultOpen = false;  // 기본 접힘 (액션 시 다시 접힘)
 
     let tableHtml = '';
     if (item.options && item.options.length) {
