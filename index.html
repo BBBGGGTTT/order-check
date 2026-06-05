@@ -975,7 +975,7 @@ function renderRecommend(candidates) {
       const totalOpts = prod.opts.length;
       const needOpts = prod.opts.filter(function(o) { return o.isNeed; }).length;
       const needCount = document.createElement('span');
-      needCount.textContent = '▲ ' + totalOpts + '/' + needOpts + '옵션';
+      needCount.textContent = '▲ ' + needOpts + '옵션';
       needCount.style.cssText = 'font-size:11px;color:#dc2626;white-space:nowrap;';
 
       const badge = document.createElement('span');
