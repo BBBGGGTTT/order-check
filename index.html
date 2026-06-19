@@ -1245,6 +1245,10 @@ function renderRecommend(candidates, totalCodes, needCodes) {
       needCount.textContent = '▲ ' + needOpts + '옵션';
       needCount.style.cssText = 'font-size:11px;color:#dc2626;white-space:nowrap;';
 
+      const shortageBadge = document.createElement('span');
+      shortageBadge.textContent = '부족 ' + totalShortage;
+      shortageBadge.style.cssText = 'font-size:10px;padding:2px 8px;border-radius:10px;background:#fef2f2;color:#dc2626;font-weight:600;white-space:nowrap;';
+
       const badge = document.createElement('span');
       badge.textContent = '발주 필요';
       badge.style.cssText = 'font-size:10px;padding:2px 8px;border-radius:20px;background:#fef2f2;color:#dc2626;border:1px solid #fecaca;font-weight:600;white-space:nowrap;';
@@ -1258,6 +1262,7 @@ function renderRecommend(candidates, totalCodes, needCodes) {
       header.appendChild(seasonSpan);
       header.appendChild(nameSpan);
       header.appendChild(needCount);
+      header.appendChild(shortageBadge);
       header.appendChild(badge);
       header.appendChild(chev);
 
@@ -1794,6 +1799,7 @@ function renderList() {
         }">${item.season}</span>` : ''}
         <span class="prod-name">${item.product}</span>
         ${needOpts.length ? `<span class="prod-need-count">▲ ${needOpts.length}옵션</span>` : ''}
+        ${needOpts.length ? `<span style="font-size:10px;padding:2px 8px;border-radius:10px;background:#fef2f2;color:#dc2626;font-weight:600;white-space:nowrap;">부족 ${needOpts.reduce(function(s,o){return s+(o.shortage||0);},0)}</span>` : ''}
         <span class="prod-badge ${badgeClass}">${badgeText}</span>
         <span class="chevron ${defaultOpen?'open':''}" id="chev-${idx}">▶</span>
       </div>
