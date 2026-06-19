@@ -1249,6 +1249,11 @@ function renderRecommend(candidates, totalCodes, needCodes) {
       shortageBadge.textContent = '부족 ' + totalShortage;
       shortageBadge.style.cssText = 'font-size:10px;padding:2px 8px;border-radius:10px;background:#fef2f2;color:#dc2626;font-weight:600;white-space:nowrap;';
 
+      const totalS7d = prod.opts.reduce(function(s,o){ return s+(o.s7d||0); }, 0);
+      const s7dBadge = document.createElement('span');
+      s7dBadge.textContent = '7일 판매 ' + totalS7d;
+      s7dBadge.style.cssText = 'font-size:10px;padding:2px 8px;border-radius:10px;background:#f5f3ff;color:#7c3aed;font-weight:600;white-space:nowrap;';
+
       const badge = document.createElement('span');
       badge.textContent = '발주 필요';
       badge.style.cssText = 'font-size:10px;padding:2px 8px;border-radius:20px;background:#fef2f2;color:#dc2626;border:1px solid #fecaca;font-weight:600;white-space:nowrap;';
@@ -1263,6 +1268,7 @@ function renderRecommend(candidates, totalCodes, needCodes) {
       header.appendChild(nameSpan);
       header.appendChild(needCount);
       header.appendChild(shortageBadge);
+      header.appendChild(s7dBadge);
       header.appendChild(badge);
       header.appendChild(chev);
 
@@ -1800,6 +1806,7 @@ function renderList() {
         <span class="prod-name">${item.product}</span>
         ${needOpts.length ? `<span class="prod-need-count">▲ ${needOpts.length}옵션</span>` : ''}
         ${needOpts.length ? `<span style="font-size:10px;padding:2px 8px;border-radius:10px;background:#fef2f2;color:#dc2626;font-weight:600;white-space:nowrap;">부족 ${needOpts.reduce(function(s,o){return s+(o.shortage||0);},0)}</span>` : ''}
+        <span style="font-size:10px;padding:2px 8px;border-radius:10px;background:#f5f3ff;color:#7c3aed;font-weight:600;white-space:nowrap;">7일 판매 ${(item.options||[]).reduce(function(s,o){return s+(o.s7d||0);},0)}</span>
         <span class="prod-badge ${badgeClass}">${badgeText}</span>
         <span class="chevron ${defaultOpen?'open':''}" id="chev-${idx}">▶</span>
       </div>
