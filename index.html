@@ -2348,7 +2348,7 @@ function saveToFirestore(fileName) {
       productMap[code].opts.push({opt:opt, sales:parseInt(row[todayCol])||0, sales7d:parseInt(row[col7d])||0, stock:parseInt(row[colStock])||0});
     });
     var codes=Object.keys(productMap);
-    var BATCH_SIZE = 200;
+    var BATCH_SIZE = 100;
     var totalBatches = Math.ceil(codes.length / BATCH_SIZE);
 
     async function saveAllBatches() {
@@ -2384,7 +2384,7 @@ function saveToFirestore(fileName) {
           throw e;
         }
         if (si + BATCH_SIZE < codes.length) {
-          await new Promise(function(r){ setTimeout(r, 1000); });
+          await new Promise(function(r){ setTimeout(r, 2000); });
         }
       }
       try {
