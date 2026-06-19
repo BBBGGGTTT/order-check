@@ -1358,7 +1358,18 @@ function renderRecommend(candidates, totalCodes, needCodes) {
 
       card.appendChild(header);
       card.appendChild(body);
-      list.appendChild(card);
+
+      // 번호 + 카드 wrapper
+      const cardRow = document.createElement('div');
+      cardRow.style.cssText = 'display:flex;align-items:center;gap:12px;';
+      const numSpan = document.createElement('span');
+      numSpan.textContent = (idx + 1) + '.';
+      numSpan.style.cssText = 'font-size:13px;color:#9ca3af;font-weight:500;min-width:28px;text-align:right;flex-shrink:0;';
+      card.style.flex = '1';
+      card.style.minWidth = '0';
+      cardRow.appendChild(numSpan);
+      cardRow.appendChild(card);
+      list.appendChild(cardRow);
     });
 
     wrap.appendChild(list);
@@ -1770,7 +1781,9 @@ function renderList() {
       </div>`;
     }
 
-    return `<div class="product-card ${ps==='need'?'need':ps==='mixed'?'mixed':''}">
+    return `<div style="display:flex;align-items:center;gap:12px;">
+      <span style="font-size:13px;color:#9ca3af;font-weight:500;min-width:28px;text-align:right;flex-shrink:0;">${idx+1}.</span>
+      <div class="product-card ${ps==='need'?'need':ps==='mixed'?'mixed':''}" style="flex:1;min-width:0;">
       <div class="product-header" onclick="toggleOpts(${idx})">
         <span class="prod-code">${item.code}</span>
         ${item.season ? `<span style="font-size:10px;padding:2px 8px;border-radius:10px;font-weight:600;margin-left:2px;${
@@ -1785,6 +1798,7 @@ function renderList() {
         <span class="chevron ${defaultOpen?'open':''}" id="chev-${idx}">▶</span>
       </div>
       ${tableHtml}
+      </div>
     </div>`;
   }).join('');
 
