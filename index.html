@@ -679,6 +679,20 @@ function runAutoRecommend() {
 
   if (!colName || !colStock || !col7d) return;
 
+  // 일별 컬럼 추출 (2026-05-19 같은 날짜 패턴, 줄바꿈 포함 가능)
+  const dailyCols = keys.filter(function(k) {
+    if (!k) return false;
+    var clean = String(k).replace(/[\r\n\s]/g, '');
+    return /^\d{4}-\d{1,2}-\d{1,2}$/.test(clean);
+  }).sort(function(a, b) {
+    return String(a).replace(/[\r\n\s]/g,'').localeCompare(String(b).replace(/[\r\n\s]/g,''));
+  });
+
+  // 14일치 이상이어야 비교 가능
+  const canCompare = dailyCols.length >= 14;
+  const last7Cols = canCompare ? dailyCols.slice(-7) : [];
+  const prev7Cols = canCompare ? dailyCols.slice(-14, -7) : [];
+
   // 전체 데이터에서 발주 필요 옵션 추출
   const candidates = [];
   const codeMap = {};
@@ -718,12 +732,20 @@ function runAutoRecommend() {
 
       if (isNeed) hasNeed = true;
 
+      // 일별 컬럼에서 최근 7일 vs 이전 7일 합산
+      var last7Sum = 0, prev7Sum = 0;
+      if (canCompare) {
+        for (var i = 0; i < last7Cols.length; i++) last7Sum += parseInt(row[last7Cols[i]]) || 0;
+        for (var j = 0; j < prev7Cols.length; j++) prev7Sum += parseInt(row[prev7Cols[j]]) || 0;
+      }
+
       allOpts.push({
         code, product: prodName, season, isSeasonY,
         opt: optName, stock, s7d, criteria,
         shortage: isNeed ? criteria - stock : 0,
         isZeroStock: stock === 0,
         soldOut, isNeed, isSoldOut,
+        last7Sum: last7Sum, prev7Sum: prev7Sum,
         rowIdx: rowObj.idx
       });
     });
@@ -1218,7 +1240,7 @@ function renderRecommend(candidates, totalCodes, needCodes) {
 
       // 헤더
       const header = document.createElement('div');
-      header.style.cssText = 'padding:10px 14px;display:flex;align-items:center;gap:8px;cursor:pointer;';
+      header.style.cssText = 'padding:10px 14px;display:flex;flex-direction:column;gap:6px;cursor:pointer;';
       header.onclick = function() {
         const body = card.querySelector('.rec-body');
         const chev = card.querySelector('.rec-chev');
@@ -1246,13 +1268,35 @@ function renderRecommend(candidates, totalCodes, needCodes) {
       needCount.style.cssText = 'font-size:11px;color:#dc2626;white-space:nowrap;';
 
       const shortageBadge = document.createElement('span');
-      shortageBadge.textContent = '부족 ' + totalShortage;
+      shortageBadge.textContent = '부족 ' + totalShortage + '장';
       shortageBadge.style.cssText = 'font-size:10px;padding:2px 8px;border-radius:10px;background:#fef2f2;color:#dc2626;font-weight:600;white-space:nowrap;';
 
       const totalS7d = prod.opts.reduce(function(s,o){ return s+(o.s7d||0); }, 0);
       const s7dBadge = document.createElement('span');
-      s7dBadge.textContent = '7일 판매 ' + totalS7d;
+      s7dBadge.textContent = '7일 판매 ' + totalS7d + '장';
       s7dBadge.style.cssText = 'font-size:10px;padding:2px 8px;border-radius:10px;background:#f5f3ff;color:#7c3aed;font-weight:600;white-space:nowrap;';
+
+      // 비교 배지 (최근 7일 vs 이전 7일)
+      let compareBadge = null;
+      const totalLast7 = prod.opts.reduce(function(s,o){ return s+(o.last7Sum||0); }, 0);
+      const totalPrev7 = prod.opts.reduce(function(s,o){ return s+(o.prev7Sum||0); }, 0);
+      if (canCompare && (totalLast7 > 0 || totalPrev7 > 0)) {
+        compareBadge = document.createElement('span');
+        compareBadge.style.cssText = 'font-size:10px;padding:2px 8px;border-radius:10px;background:#fef2f2;color:#dc2626;font-weight:600;white-space:nowrap;';
+        if (totalPrev7 === 0 && totalLast7 > 0) {
+          compareBadge.textContent = '🆕 신규';
+        } else if (totalPrev7 > 0) {
+          const ratio = totalLast7 / totalPrev7;
+          let icon = '→';
+          if (ratio >= 2.0) icon = '🔥';
+          else if (ratio >= 1.5) icon = '↗';
+          else if (ratio >= 0.66) icon = '→';
+          else if (ratio >= 0.5) icon = '↘';
+          else icon = '❄';
+          const ratioText = ratio >= 1 ? ratio.toFixed(1) + '배' : (ratio * 100).toFixed(0) + '%';
+          compareBadge.textContent = icon + ' ' + ratioText + ' (' + totalPrev7 + '→' + totalLast7 + ')';
+        }
+      }
 
       const badge = document.createElement('span');
       badge.textContent = '발주 필요';
@@ -1263,14 +1307,25 @@ function renderRecommend(candidates, totalCodes, needCodes) {
       chev.textContent = '▶';
       chev.style.cssText = 'font-size:10px;color:#9ca3af;';
 
-      header.appendChild(codeSpan);
-      header.appendChild(seasonSpan);
-      header.appendChild(nameSpan);
-      header.appendChild(needCount);
-      header.appendChild(shortageBadge);
-      header.appendChild(s7dBadge);
-      header.appendChild(badge);
-      header.appendChild(chev);
+      // row 1: 식별 정보 (코드, 시즌, 상품명, 발주 필요 배지, ▶)
+      const row1 = document.createElement('div');
+      row1.style.cssText = 'display:flex;align-items:center;gap:8px;';
+      row1.appendChild(codeSpan);
+      row1.appendChild(seasonSpan);
+      row1.appendChild(nameSpan);
+      row1.appendChild(badge);
+      row1.appendChild(chev);
+
+      // row 2: 수치 (옵션 수, 부족, 7일 판매, 비교)
+      const row2 = document.createElement('div');
+      row2.style.cssText = 'display:flex;align-items:center;gap:6px;flex-wrap:wrap;';
+      row2.appendChild(needCount);
+      row2.appendChild(shortageBadge);
+      row2.appendChild(s7dBadge);
+      if (compareBadge) row2.appendChild(compareBadge);
+
+      header.appendChild(row1);
+      header.appendChild(row2);
 
       // 옵션 테이블
       const body = document.createElement('div');
@@ -1484,6 +1539,18 @@ function analyze() {
     return;
   }
 
+  // 일별 컬럼 추출 (자동 추천과 동일 로직)
+  const dailyCols = keys.filter(function(k) {
+    if (!k) return false;
+    var clean = String(k).replace(/[\r\n\s]/g, '');
+    return /^\d{4}-\d{1,2}-\d{1,2}$/.test(clean);
+  }).sort(function(a, b) {
+    return String(a).replace(/[\r\n\s]/g,'').localeCompare(String(b).replace(/[\r\n\s]/g,''));
+  });
+  const canCompare = dailyCols.length >= 14;
+  const last7Cols = canCompare ? dailyCols.slice(-7) : [];
+  const prev7Cols = canCompare ? dailyCols.slice(-14, -7) : [];
+
   // 코드 → 행 매핑
   const codeMap = {};
   globalDf.forEach(row => {
@@ -1521,13 +1588,19 @@ function analyze() {
       // 품절/일시품절이면 발주 판단 제외
       const isSoldOut = soldOut === '품절' || soldOut === '일시품절';
       const status = isSoldOut ? 'ok' : (stock < criteria ? 'need' : 'ok');
-      return { opt: optName, stock, s7d, criteria, shortage: isSoldOut ? 0 : (shortage > 0 ? shortage : 0), status, soldOut };
+      // 일별 합산
+      var last7Sum = 0, prev7Sum = 0;
+      if (canCompare) {
+        for (var i = 0; i < last7Cols.length; i++) last7Sum += parseInt(row[last7Cols[i]]) || 0;
+        for (var j = 0; j < prev7Cols.length; j++) prev7Sum += parseInt(row[prev7Cols[j]]) || 0;
+      }
+      return { opt: optName, stock, s7d, criteria, shortage: isSoldOut ? 0 : (shortage > 0 ? shortage : 0), status, soldOut, last7Sum: last7Sum, prev7Sum: prev7Sum };
     });
     const season = globalSeason[realName] || '';
     const hasNeed = options.some(o => o.status === 'need');
     const hasOk = options.some(o => o.status === 'ok');
     const productStatus = hasNeed && hasOk ? 'mixed' : hasNeed ? 'need' : 'ok';
-    results.push({ code, inputLine, product: realName, options, productStatus, season });
+    results.push({ code, inputLine, product: realName, options, productStatus, season, _canCompare: canCompare });
   }
 
   allResults = results;
@@ -1756,6 +1829,32 @@ function renderList() {
     const needOpts = item.options ? item.options.filter(o => o.status === 'need') : [];
     const defaultOpen = false;  // 기본 접힘 (액션 시 다시 접힘)
 
+    // 비교 배지 계산 (최근 7일 vs 이전 7일)
+    let compareBadgeHtml = '';
+    if (item._canCompare && item.options && item.options.length) {
+      const totalLast7 = item.options.reduce(function(s,o){ return s + (o.last7Sum||0); }, 0);
+      const totalPrev7 = item.options.reduce(function(s,o){ return s + (o.prev7Sum||0); }, 0);
+      if (totalLast7 > 0 || totalPrev7 > 0) {
+        let txt = '';
+        if (totalPrev7 === 0 && totalLast7 > 0) {
+          txt = '🆕 신규';
+        } else if (totalPrev7 > 0) {
+          const ratio = totalLast7 / totalPrev7;
+          let icon = '→';
+          if (ratio >= 2.0) icon = '🔥';
+          else if (ratio >= 1.5) icon = '↗';
+          else if (ratio >= 0.66) icon = '→';
+          else if (ratio >= 0.5) icon = '↘';
+          else icon = '❄';
+          const ratioText = ratio >= 1 ? ratio.toFixed(1) + '배' : (ratio * 100).toFixed(0) + '%';
+          txt = icon + ' ' + ratioText + ' (' + totalPrev7 + '→' + totalLast7 + ')';
+        }
+        if (txt) {
+          compareBadgeHtml = `<span style="font-size:10px;padding:2px 8px;border-radius:10px;background:#fef2f2;color:#dc2626;font-weight:600;white-space:nowrap;">${txt}</span>`;
+        }
+      }
+    }
+
     let tableHtml = '';
     if (item.options && item.options.length) {
       const showOpts = item.options;
@@ -1795,20 +1894,25 @@ function renderList() {
     return `<div style="display:flex;align-items:center;gap:12px;">
       <span style="font-size:13px;color:#9ca3af;font-weight:500;min-width:28px;text-align:right;flex-shrink:0;">${idx+1}.</span>
       <div class="product-card ${ps==='need'?'need':ps==='mixed'?'mixed':''}" style="flex:1;min-width:0;">
-      <div class="product-header" onclick="toggleOpts(${idx})">
-        <span class="prod-code">${item.code}</span>
-        ${item.season ? `<span style="font-size:10px;padding:2px 8px;border-radius:10px;font-weight:600;margin-left:2px;${
-          item.season.includes('(Y)') ? 'background:#f0fdf4;color:#16a34a;' :
-          item.season.includes('(OFF)') ? 'background:#fffbeb;color:#d97706;' :
-          item.season.includes('(N)') ? 'background:#f3f4f6;color:#9ca3af;' :
-          'background:#eff6ff;color:#2563eb;'
-        }">${item.season}</span>` : ''}
-        <span class="prod-name">${item.product}</span>
-        ${needOpts.length ? `<span class="prod-need-count">▲ ${needOpts.length}옵션</span>` : ''}
-        ${needOpts.length ? `<span style="font-size:10px;padding:2px 8px;border-radius:10px;background:#fef2f2;color:#dc2626;font-weight:600;white-space:nowrap;">부족 ${needOpts.reduce(function(s,o){return s+(o.shortage||0);},0)}</span>` : ''}
-        <span style="font-size:10px;padding:2px 8px;border-radius:10px;background:#f5f3ff;color:#7c3aed;font-weight:600;white-space:nowrap;">7일 판매 ${(item.options||[]).reduce(function(s,o){return s+(o.s7d||0);},0)}</span>
-        <span class="prod-badge ${badgeClass}">${badgeText}</span>
-        <span class="chevron ${defaultOpen?'open':''}" id="chev-${idx}">▶</span>
+      <div class="product-header" onclick="toggleOpts(${idx})" style="flex-direction:column;align-items:stretch;gap:6px;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span class="prod-code">${item.code}</span>
+          ${item.season ? `<span style="font-size:10px;padding:2px 8px;border-radius:10px;font-weight:600;margin-left:2px;${
+            item.season.includes('(Y)') ? 'background:#f0fdf4;color:#16a34a;' :
+            item.season.includes('(OFF)') ? 'background:#fffbeb;color:#d97706;' :
+            item.season.includes('(N)') ? 'background:#f3f4f6;color:#9ca3af;' :
+            'background:#eff6ff;color:#2563eb;'
+          }">${item.season}</span>` : ''}
+          <span class="prod-name">${item.product}</span>
+          <span class="prod-badge ${badgeClass}">${badgeText}</span>
+          <span class="chevron ${defaultOpen?'open':''}" id="chev-${idx}">▶</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+          ${needOpts.length ? `<span class="prod-need-count">▲ ${needOpts.length}옵션</span>` : ''}
+          ${needOpts.length ? `<span style="font-size:10px;padding:2px 8px;border-radius:10px;background:#fef2f2;color:#dc2626;font-weight:600;white-space:nowrap;">부족 ${needOpts.reduce(function(s,o){return s+(o.shortage||0);},0)}장</span>` : ''}
+          <span style="font-size:10px;padding:2px 8px;border-radius:10px;background:#f5f3ff;color:#7c3aed;font-weight:600;white-space:nowrap;">7일 판매 ${(item.options||[]).reduce(function(s,o){return s+(o.s7d||0);},0)}장</span>
+          ${compareBadgeHtml}
+        </div>
       </div>
       ${tableHtml}
       </div>
