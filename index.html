@@ -508,6 +508,7 @@ KJST2189
 let globalDf = null;
 let global7dLabel = '';
 let globalMulti = 2;
+let globalCompareDays = 7;  // 비교 기간 (기본 7일, 1~15)
 let globalSoldOut = {};
 let globalSeason = {};
 let currentSeason = '';
@@ -616,6 +617,24 @@ function onMultiInput(val) {
   if (allResults.length > 0) analyze();
 }
 
+// 비교 기간 변경 (발주 확인 탭에서 사용)
+function setCompareDays(days) {
+  globalCompareDays = days;
+  if (allResults.length > 0) analyze();
+}
+
+function onCustomCompareChange(val) {
+  const v = parseInt(val);
+  if (!isNaN(v) && v >= 1 && v <= 15) {
+    globalCompareDays = v;
+    if (allResults.length > 0) analyze();
+  } else if (val === '' || val === null) {
+    // empty - ignore
+  } else {
+    alert('1~15 사이로 입력해주세요.');
+  }
+}
+
 function onMultiSlider(val) {
   const v = parseFloat(val);
   globalMulti = v;
@@ -688,10 +707,12 @@ function runAutoRecommend() {
     return String(a).replace(/[\r\n\s]/g,'').localeCompare(String(b).replace(/[\r\n\s]/g,''));
   });
 
-  // 14일치 이상이어야 비교 가능
-  const canCompare = dailyCols.length >= 14;
-  const last7Cols = canCompare ? dailyCols.slice(-7) : [];
-  const prev7Cols = canCompare ? dailyCols.slice(-14, -7) : [];
+  // 비교 기간 (1~15일, 기본 7)
+  const compareDays = Math.max(1, Math.min(15, globalCompareDays || 7));
+  // 데이터가 2N 일치 이상 있어야 비교 가능
+  const canCompare = dailyCols.length >= compareDays * 2;
+  const lastNCols = dailyCols.slice(-compareDays);
+  const prevNCols = canCompare ? dailyCols.slice(-compareDays * 2, -compareDays) : [];
 
   // 전체 데이터에서 발주 필요 옵션 추출
   const candidates = [];
@@ -722,22 +743,25 @@ function runAutoRecommend() {
     item.opts.forEach(function(rowObj) {
       const row = rowObj.row;
       const stock = parseInt(row[colStock]) || 0;
-      const s7d = parseInt(row[col7d]) || 0;
-      const criteria = Math.ceil(s7d * globalMulti);
       const optName = String(row[colOpt] || '');
       const soldOutKey = prodName + '||' + optName;
       const soldOut = globalSoldOut[soldOutKey] || '';
       const isSoldOut = soldOut === '품절' || soldOut === '일시품절';
+
+      // N일 판매량 (일별 컬럼이 충분하면 동적 합산, 부족하면 col7d로 fallback)
+      var lastNSum = 0, prevNSum = 0;
+      if (lastNCols.length === compareDays) {
+        for (var i = 0; i < lastNCols.length; i++) lastNSum += parseInt(row[lastNCols[i]]) || 0;
+      }
+      if (canCompare) {
+        for (var j = 0; j < prevNCols.length; j++) prevNSum += parseInt(row[prevNCols[j]]) || 0;
+      }
+      // 일별 데이터가 부족하면 엑셀 7일 판매량 컬럼 사용 (호환)
+      const s7d = lastNCols.length === compareDays ? lastNSum : (parseInt(row[col7d]) || 0);
+      const criteria = Math.ceil(s7d * globalMulti);
       const isNeed = !isSoldOut && stock < criteria && criteria > 0;
 
       if (isNeed) hasNeed = true;
-
-      // 일별 컬럼에서 최근 7일 vs 이전 7일 합산
-      var last7Sum = 0, prev7Sum = 0;
-      if (canCompare) {
-        for (var i = 0; i < last7Cols.length; i++) last7Sum += parseInt(row[last7Cols[i]]) || 0;
-        for (var j = 0; j < prev7Cols.length; j++) prev7Sum += parseInt(row[prev7Cols[j]]) || 0;
-      }
 
       allOpts.push({
         code, product: prodName, season, isSeasonY,
@@ -745,7 +769,7 @@ function runAutoRecommend() {
         shortage: isNeed ? criteria - stock : 0,
         isZeroStock: stock === 0,
         soldOut, isNeed, isSoldOut,
-        last7Sum: last7Sum, prev7Sum: prev7Sum,
+        lastNSum: lastNSum, prevNSum: prevNSum,
         rowIdx: rowObj.idx
       });
     });
@@ -765,10 +789,10 @@ function runAutoRecommend() {
     return (b.isZeroStock ? 1 : 0) - (a.isZeroStock ? 1 : 0);
   });
 
-  renderRecommend(candidates, Object.keys(codeMap).length, needCodesCount, canCompare);
+  renderRecommend(candidates, Object.keys(codeMap).length, needCodesCount, canCompare, compareDays);
 }
 
-function renderRecommend(candidates, totalCodes, needCodes, canCompare) {
+function renderRecommend(candidates, totalCodes, needCodes, canCompare, compareDays) {
   const mainArea = document.getElementById('mainArea');
 
   // 시즌 목록 추출
@@ -923,7 +947,7 @@ function renderRecommend(candidates, totalCodes, needCodes, canCompare) {
 
   [
     { key: 'need', label: '발주필요 옵션' },
-    { key: 's7d', label: '7일 판매량' },
+    { key: 's7d', label: compareDays + '일 판매량' },
     { key: 'shortage', label: '부족 수량' }
   ].forEach(function(item) {
     const btn = document.createElement('button');
@@ -979,7 +1003,7 @@ function renderRecommend(candidates, totalCodes, needCodes, canCompare) {
 
   minRow.appendChild(createMinBox('발주필요 옵션', 'need', 48));
   minRow.appendChild(createMinBox('부족수량', 'shortage', 60));
-  minRow.appendChild(createMinBox('7일 판매량', 's7d', 60));
+  minRow.appendChild(createMinBox(compareDays + '일 판매량', 's7d', 60));
 
   const minHint = document.createElement('span');
   minHint.textContent = '(0 = 해제)';
@@ -987,6 +1011,76 @@ function renderRecommend(candidates, totalCodes, needCodes, canCompare) {
   minRow.appendChild(minHint);
 
   mainArea.appendChild(minRow);
+
+  // ───── 1-3. 비교 기간 선택 ─────
+  const compareSection = document.createElement('div');
+  compareSection.style.cssText = 'background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:8px 12px;margin-bottom:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;';
+
+  const compareLbl = document.createElement('span');
+  compareLbl.textContent = '비교 기간';
+  compareLbl.style.cssText = 'font-size:12px;color:#92400e;font-weight:600;';
+  compareSection.appendChild(compareLbl);
+
+  const compareBtns = [];
+  function styleCompareBtn(btn, active) {
+    btn.style.cssText = 'padding:4px 12px;font-size:12px;font-weight:600;border:1px solid '+(active?'#d97706':'#fde68a')+';border-radius:14px;background:'+(active?'#d97706':'#fff')+';color:'+(active?'#fff':'#92400e')+';cursor:pointer;font-family:Noto Sans KR,sans-serif;';
+  }
+  [7, 9].forEach(function(d) {
+    const b = document.createElement('button');
+    b.textContent = d + '일';
+    b.dataset.days = d;
+    styleCompareBtn(b, globalCompareDays === d);
+    b.onclick = function() {
+      globalCompareDays = d;
+      runAutoRecommend();
+    };
+    compareBtns.push(b);
+    compareSection.appendChild(b);
+  });
+
+  const divider = document.createElement('span');
+  divider.textContent = '|';
+  divider.style.cssText = 'color:#fbbf24;font-size:11px;';
+  compareSection.appendChild(divider);
+
+  const customLbl = document.createElement('span');
+  customLbl.textContent = '직접 입력';
+  customLbl.style.cssText = 'font-size:11px;color:#92400e;';
+  compareSection.appendChild(customLbl);
+
+  const customInp = document.createElement('input');
+  customInp.type = 'number';
+  customInp.min = '1'; customInp.max = '15'; customInp.step = '1';
+  customInp.value = (globalCompareDays !== 7 && globalCompareDays !== 9) ? globalCompareDays : '';
+  customInp.placeholder = '1~15';
+  customInp.style.cssText = 'width:60px;padding:3px 8px;border:1px solid #fde68a;border-radius:6px;font-size:12px;text-align:center;background:#fff;color:#92400e;font-weight:600;';
+  customInp.onchange = function() {
+    const v = parseInt(customInp.value);
+    if (!isNaN(v) && v >= 1 && v <= 15) {
+      globalCompareDays = v;
+      runAutoRecommend();
+    } else if (customInp.value === '') {
+      // empty - ignore
+    } else {
+      alert('1~15 사이로 입력해주세요.');
+      customInp.value = '';
+    }
+  };
+  compareSection.appendChild(customInp);
+
+  const dayLbl = document.createElement('span');
+  dayLbl.textContent = '일';
+  dayLbl.style.cssText = 'font-size:11px;color:#92400e;';
+  compareSection.appendChild(dayLbl);
+
+  if (!canCompare) {
+    const warn = document.createElement('span');
+    warn.textContent = '⚠ 일별 데이터 부족';
+    warn.style.cssText = 'font-size:10px;color:#dc2626;margin-left:auto;';
+    compareSection.appendChild(warn);
+  }
+
+  mainArea.appendChild(compareSection);
 
   // ───── 2. 안정재고 배수 설정 (슬라이더) ─────
   const multiSection = document.createElement('div');
@@ -1002,7 +1096,7 @@ function renderRecommend(candidates, totalCodes, needCodes, canCompare) {
   multiTitle.style.cssText = 'font-size:13px;font-weight:600;color:#1e40af;';
   multiLeft.appendChild(multiTitle);
   const multiPre = document.createElement('span');
-  multiPre.textContent = '7일 판매량 ×';
+  multiPre.textContent = compareDays + '일 판매량 ×';
   multiPre.style.cssText = 'font-size:12px;color:#1e40af;';
   multiLeft.appendChild(multiPre);
 
@@ -1273,13 +1367,13 @@ function renderRecommend(candidates, totalCodes, needCodes, canCompare) {
 
       const totalS7d = prod.opts.reduce(function(s,o){ return s+(o.s7d||0); }, 0);
       const s7dBadge = document.createElement('span');
-      s7dBadge.textContent = '7일 판매 ' + totalS7d + '장';
+      s7dBadge.textContent = compareDays + '일 판매 ' + totalS7d + '장';
       s7dBadge.style.cssText = 'font-size:10px;padding:2px 8px;border-radius:10px;background:#f5f3ff;color:#7c3aed;font-weight:600;white-space:nowrap;';
 
-      // 비교 배지 (최근 7일 vs 이전 7일)
+      // 비교 배지 (최근 N일 vs 이전 N일)
       let compareBadge = null;
-      const totalLast7 = prod.opts.reduce(function(s,o){ return s+(o.last7Sum||0); }, 0);
-      const totalPrev7 = prod.opts.reduce(function(s,o){ return s+(o.prev7Sum||0); }, 0);
+      const totalLast7 = prod.opts.reduce(function(s,o){ return s+(o.lastNSum||0); }, 0);
+      const totalPrev7 = prod.opts.reduce(function(s,o){ return s+(o.prevNSum||0); }, 0);
       if (canCompare && (totalLast7 > 0 || totalPrev7 > 0)) {
         compareBadge = document.createElement('span');
         compareBadge.style.cssText = 'font-size:10px;padding:2px 8px;border-radius:10px;background:#fef2f2;color:#dc2626;font-weight:600;white-space:nowrap;';
@@ -1338,7 +1432,7 @@ function renderRecommend(candidates, totalCodes, needCodes, canCompare) {
       const thead = document.createElement('thead');
       const hrow = document.createElement('tr');
       hrow.style.cssText = 'background:#f9fafb;';
-      [{h:'옵션',align:'left'},{h:'현재고',align:'right'},{h:'7일판매',align:'right'},{h:'안정재고',align:'right'},{h:'부족수량',align:'right'},{h:'품절여부',align:'center'},{h:'판단',align:'center'}].forEach(function(col) {
+      [{h:'옵션',align:'left'},{h:'현재고',align:'right'},{h:compareDays+'일판매',align:'right'},{h:'안정재고',align:'right'},{h:'부족수량',align:'right'},{h:'품절여부',align:'center'},{h:'판단',align:'center'}].forEach(function(col) {
         const th = document.createElement('th');
         th.textContent = col.h;
         th.style.cssText = 'padding:5px 8px;font-size:11px;color:#6b7280;font-weight:600;text-align:'+col.align+';border-bottom:1px solid #e5e7eb;white-space:nowrap;';
@@ -1547,9 +1641,10 @@ function analyze() {
   }).sort(function(a, b) {
     return String(a).replace(/[\r\n\s]/g,'').localeCompare(String(b).replace(/[\r\n\s]/g,''));
   });
-  const canCompare = dailyCols.length >= 14;
-  const last7Cols = canCompare ? dailyCols.slice(-7) : [];
-  const prev7Cols = canCompare ? dailyCols.slice(-14, -7) : [];
+  const compareDays = Math.max(1, Math.min(15, globalCompareDays || 7));
+  const canCompare = dailyCols.length >= compareDays * 2;
+  const lastNCols = dailyCols.slice(-compareDays);
+  const prevNCols = canCompare ? dailyCols.slice(-compareDays * 2, -compareDays) : [];
 
   // 코드 → 행 매핑
   const codeMap = {};
@@ -1579,28 +1674,29 @@ function analyze() {
     const realName = String(rows[0][colName] || inputLine);
     const options = rows.map(row => {
       const stock = parseInt(row[colStock]) || 0;
-      const s7d = parseInt(row[col7d]) || 0;
-      const criteria = Math.ceil(s7d * globalMulti);
-      const shortage = criteria - stock;
       const optName = String(row[colOpt] || '');
       const soldOutKey = realName + '||' + optName;
       const soldOut = globalSoldOut[soldOutKey] || '';
-      // 품절/일시품절이면 발주 판단 제외
       const isSoldOut = soldOut === '품절' || soldOut === '일시품절';
-      const status = isSoldOut ? 'ok' : (stock < criteria ? 'need' : 'ok');
-      // 일별 합산
-      var last7Sum = 0, prev7Sum = 0;
-      if (canCompare) {
-        for (var i = 0; i < last7Cols.length; i++) last7Sum += parseInt(row[last7Cols[i]]) || 0;
-        for (var j = 0; j < prev7Cols.length; j++) prev7Sum += parseInt(row[prev7Cols[j]]) || 0;
+      // N일 판매량 (일별 컬럼 있으면 동적 합산, 없으면 엑셀 col7d)
+      var lastNSum = 0, prevNSum = 0;
+      if (lastNCols.length === compareDays) {
+        for (var i = 0; i < lastNCols.length; i++) lastNSum += parseInt(row[lastNCols[i]]) || 0;
       }
-      return { opt: optName, stock, s7d, criteria, shortage: isSoldOut ? 0 : (shortage > 0 ? shortage : 0), status, soldOut, last7Sum: last7Sum, prev7Sum: prev7Sum };
+      if (canCompare) {
+        for (var j = 0; j < prevNCols.length; j++) prevNSum += parseInt(row[prevNCols[j]]) || 0;
+      }
+      const s7d = lastNCols.length === compareDays ? lastNSum : (parseInt(row[col7d]) || 0);
+      const criteria = Math.ceil(s7d * globalMulti);
+      const shortage = criteria - stock;
+      const status = isSoldOut ? 'ok' : (stock < criteria ? 'need' : 'ok');
+      return { opt: optName, stock, s7d, criteria, shortage: isSoldOut ? 0 : (shortage > 0 ? shortage : 0), status, soldOut, lastNSum: lastNSum, prevNSum: prevNSum };
     });
     const season = globalSeason[realName] || '';
     const hasNeed = options.some(o => o.status === 'need');
     const hasOk = options.some(o => o.status === 'ok');
     const productStatus = hasNeed && hasOk ? 'mixed' : hasNeed ? 'need' : 'ok';
-    results.push({ code, inputLine, product: realName, options, productStatus, season, _canCompare: canCompare });
+    results.push({ code, inputLine, product: realName, options, productStatus, season, _canCompare: canCompare, _compareDays: compareDays });
   }
 
   allResults = results;
@@ -1622,10 +1718,27 @@ function renderResults(results) {
     return '<span style="font-size:10px;color:#93c5fd;">' + label + '</span>';
   }).join('');
 
+  // 비교 기간 선택 UI
+  const checkCompareDaysVal = globalCompareDays || 7;
+  const customDayVal = (checkCompareDaysVal !== 7 && checkCompareDaysVal !== 9) ? checkCompareDaysVal : '';
+  const btn7Style = 'padding:4px 12px;font-size:12px;font-weight:600;border:1px solid '+(checkCompareDaysVal===7?'#d97706':'#fde68a')+';border-radius:14px;background:'+(checkCompareDaysVal===7?'#d97706':'#fff')+';color:'+(checkCompareDaysVal===7?'#fff':'#92400e')+';cursor:pointer;font-family:Noto Sans KR,sans-serif;';
+  const btn9Style = 'padding:4px 12px;font-size:12px;font-weight:600;border:1px solid '+(checkCompareDaysVal===9?'#d97706':'#fde68a')+';border-radius:14px;background:'+(checkCompareDaysVal===9?'#d97706':'#fff')+';color:'+(checkCompareDaysVal===9?'#fff':'#92400e')+';cursor:pointer;font-family:Noto Sans KR,sans-serif;';
+  html += '<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:8px 12px;margin-bottom:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">'
+    + '<span style="font-size:12px;color:#92400e;font-weight:600;">비교 기간</span>'
+    + '<button onclick="setCompareDays(7)" style="' + btn7Style + '">7일</button>'
+    + '<button onclick="setCompareDays(9)" style="' + btn9Style + '">9일</button>'
+    + '<span style="color:#fbbf24;font-size:11px;">|</span>'
+    + '<span style="font-size:11px;color:#92400e;">직접 입력</span>'
+    + '<input type="number" min="1" max="15" step="1" value="' + customDayVal + '" placeholder="1~15" id="customCompareInp"'
+    + ' style="width:60px;padding:3px 8px;border:1px solid #fde68a;border-radius:6px;font-size:12px;text-align:center;background:#fff;color:#92400e;font-weight:600;"'
+    + ' onchange="onCustomCompareChange(this.value)">'
+    + '<span style="font-size:11px;color:#92400e;">일</span>'
+    + '</div>';
+
   html += '<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px 16px;margin-bottom:16px;">'
     + '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">'
     + '<span style="font-size:13px;color:#1e40af;font-weight:500;">안정재고 기준</span>'
-    + '<span style="font-size:13px;color:#3b82f6;">7일 판매량 ×</span>'
+    + '<span style="font-size:13px;color:#3b82f6;">' + checkCompareDaysVal + '일 판매량 ×</span>'
     + '<input type="number" id="multiInput" value="' + globalMulti + '" min="0.5" max="10" step="0.5"'
     + ' style="width:60px;padding:4px 8px;border:1px solid #93c5fd;border-radius:6px;font-size:15px;font-weight:700;color:#1d4ed8;background:#fff;text-align:center;"'
     + ' oninput="onMultiInput(this.value)">'
@@ -1728,9 +1841,11 @@ function renderResults(results) {
     renderList();
   }
 
+  const checkCompareDays = (results[0] && results[0]._compareDays) || globalCompareDays || 7;
+
   [
     { key: 'need', label: '발주필요 옵션' },
-    { key: 's7d', label: '7일 판매량' },
+    { key: 's7d', label: checkCompareDays + '일 판매량' },
     { key: 'shortage', label: '부족 수량' }
   ].forEach(function(item) {
     const btn = document.createElement('button');
@@ -1828,12 +1943,13 @@ function renderList() {
 
     const needOpts = item.options ? item.options.filter(o => o.status === 'need') : [];
     const defaultOpen = false;  // 기본 접힘 (액션 시 다시 접힘)
+    const itemCompareDays = item._compareDays || globalCompareDays || 7;
 
-    // 비교 배지 계산 (최근 7일 vs 이전 7일)
+    // 비교 배지 계산 (최근 N일 vs 이전 N일)
     let compareBadgeHtml = '';
     if (item._canCompare && item.options && item.options.length) {
-      const totalLast7 = item.options.reduce(function(s,o){ return s + (o.last7Sum||0); }, 0);
-      const totalPrev7 = item.options.reduce(function(s,o){ return s + (o.prev7Sum||0); }, 0);
+      const totalLast7 = item.options.reduce(function(s,o){ return s + (o.lastNSum||0); }, 0);
+      const totalPrev7 = item.options.reduce(function(s,o){ return s + (o.prevNSum||0); }, 0);
       if (totalLast7 > 0 || totalPrev7 > 0) {
         let txt = '';
         if (totalPrev7 === 0 && totalLast7 > 0) {
@@ -1863,7 +1979,7 @@ function renderList() {
           <thead><tr>
             <th>옵션</th>
             <th class="right">현재고</th>
-            <th class="right">7일판매</th>
+            <th class="right">${itemCompareDays}일판매</th>
             <th class="right">안정재고</th>
             <th class="right">부족수량</th>
             <th class="right">품절여부</th>
@@ -1910,7 +2026,7 @@ function renderList() {
         <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
           ${needOpts.length ? `<span class="prod-need-count">▲ ${needOpts.length}옵션</span>` : ''}
           ${needOpts.length ? `<span style="font-size:10px;padding:2px 8px;border-radius:10px;background:#fef2f2;color:#dc2626;font-weight:600;white-space:nowrap;">부족 ${needOpts.reduce(function(s,o){return s+(o.shortage||0);},0)}장</span>` : ''}
-          <span style="font-size:10px;padding:2px 8px;border-radius:10px;background:#f5f3ff;color:#7c3aed;font-weight:600;white-space:nowrap;">7일 판매 ${(item.options||[]).reduce(function(s,o){return s+(o.s7d||0);},0)}장</span>
+          <span style="font-size:10px;padding:2px 8px;border-radius:10px;background:#f5f3ff;color:#7c3aed;font-weight:600;white-space:nowrap;">${itemCompareDays}일 판매 ${(item.options||[]).reduce(function(s,o){return s+(o.s7d||0);},0)}장</span>
           ${compareBadgeHtml}
         </div>
       </div>
