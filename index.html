@@ -765,10 +765,10 @@ function runAutoRecommend() {
     return (b.isZeroStock ? 1 : 0) - (a.isZeroStock ? 1 : 0);
   });
 
-  renderRecommend(candidates, Object.keys(codeMap).length, needCodesCount);
+  renderRecommend(candidates, Object.keys(codeMap).length, needCodesCount, canCompare);
 }
 
-function renderRecommend(candidates, totalCodes, needCodes) {
+function renderRecommend(candidates, totalCodes, needCodes, canCompare) {
   const mainArea = document.getElementById('mainArea');
 
   // 시즌 목록 추출
