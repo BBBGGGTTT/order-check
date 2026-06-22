@@ -708,11 +708,12 @@ function runAutoRecommend() {
   });
 
   // 비교 기간 (1~15일, 기본 7)
+  // ※ "N일" = 끝날짜 - 시작날짜 = N (양쪽 포함하므로 컬럼 수는 N+1개)
   const compareDays = Math.max(1, Math.min(15, globalCompareDays || 7));
-  // 데이터가 2N 일치 이상 있어야 비교 가능
-  const canCompare = dailyCols.length >= compareDays * 2;
-  const lastNCols = dailyCols.slice(-compareDays);
-  const prevNCols = canCompare ? dailyCols.slice(-compareDays * 2, -compareDays) : [];
+  // 데이터가 2N+1 일치 이상 있어야 비교 가능 (이번주 N+1 + 저번주 N개)
+  const canCompare = dailyCols.length >= compareDays * 2 + 1;
+  const lastNCols = dailyCols.slice(-(compareDays + 1));
+  const prevNCols = canCompare ? dailyCols.slice(-(compareDays * 2 + 1), -compareDays) : [];
 
   // 전체 데이터에서 발주 필요 옵션 추출
   const candidates = [];
@@ -750,14 +751,14 @@ function runAutoRecommend() {
 
       // N일 판매량 (일별 컬럼이 충분하면 동적 합산, 부족하면 col7d로 fallback)
       var lastNSum = 0, prevNSum = 0;
-      if (lastNCols.length === compareDays) {
+      if (lastNCols.length === compareDays + 1) {
         for (var i = 0; i < lastNCols.length; i++) lastNSum += parseInt(row[lastNCols[i]]) || 0;
       }
       if (canCompare) {
         for (var j = 0; j < prevNCols.length; j++) prevNSum += parseInt(row[prevNCols[j]]) || 0;
       }
       // 일별 데이터가 부족하면 엑셀 7일 판매량 컬럼 사용 (호환)
-      const s7d = lastNCols.length === compareDays ? lastNSum : (parseInt(row[col7d]) || 0);
+      const s7d = lastNCols.length === compareDays + 1 ? lastNSum : (parseInt(row[col7d]) || 0);
       const criteria = Math.ceil(s7d * globalMulti);
       const isNeed = !isSoldOut && stock < criteria && criteria > 0;
 
@@ -1642,9 +1643,10 @@ function analyze() {
     return String(a).replace(/[\r\n\s]/g,'').localeCompare(String(b).replace(/[\r\n\s]/g,''));
   });
   const compareDays = Math.max(1, Math.min(15, globalCompareDays || 7));
-  const canCompare = dailyCols.length >= compareDays * 2;
-  const lastNCols = dailyCols.slice(-compareDays);
-  const prevNCols = canCompare ? dailyCols.slice(-compareDays * 2, -compareDays) : [];
+  // 데이터가 2N+1 일치 이상 있어야 비교 가능
+  const canCompare = dailyCols.length >= compareDays * 2 + 1;
+  const lastNCols = dailyCols.slice(-(compareDays + 1));
+  const prevNCols = canCompare ? dailyCols.slice(-(compareDays * 2 + 1), -compareDays) : [];
 
   // 코드 → 행 매핑
   const codeMap = {};
@@ -1680,13 +1682,13 @@ function analyze() {
       const isSoldOut = soldOut === '품절' || soldOut === '일시품절';
       // N일 판매량 (일별 컬럼 있으면 동적 합산, 없으면 엑셀 col7d)
       var lastNSum = 0, prevNSum = 0;
-      if (lastNCols.length === compareDays) {
+      if (lastNCols.length === compareDays + 1) {
         for (var i = 0; i < lastNCols.length; i++) lastNSum += parseInt(row[lastNCols[i]]) || 0;
       }
       if (canCompare) {
         for (var j = 0; j < prevNCols.length; j++) prevNSum += parseInt(row[prevNCols[j]]) || 0;
       }
-      const s7d = lastNCols.length === compareDays ? lastNSum : (parseInt(row[col7d]) || 0);
+      const s7d = lastNCols.length === compareDays + 1 ? lastNSum : (parseInt(row[col7d]) || 0);
       const criteria = Math.ceil(s7d * globalMulti);
       const shortage = criteria - stock;
       const status = isSoldOut ? 'ok' : (stock < criteria ? 'need' : 'ok');
