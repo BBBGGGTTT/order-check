@@ -1388,7 +1388,7 @@ function renderRecommend(candidates, totalCodes, needCodes, canCompare, compareD
           else if (ratio >= 0.66) icon = '→';
           else if (ratio >= 0.5) icon = '↘';
           else icon = '❄';
-          const ratioText = ratio >= 1 ? ratio.toFixed(1) + '배' : (ratio * 100).toFixed(0) + '%';
+          const changePct = (ratio - 1) * 100; const ratioText = (changePct > 0 ? '+' : '') + changePct.toFixed(0) + '%';
           compareBadge.textContent = icon + ' ' + ratioText + ' (' + totalPrev7 + '→' + totalLast7 + ')';
         }
       }
@@ -1964,7 +1964,7 @@ function renderList() {
           else if (ratio >= 0.66) icon = '→';
           else if (ratio >= 0.5) icon = '↘';
           else icon = '❄';
-          const ratioText = ratio >= 1 ? ratio.toFixed(1) + '배' : (ratio * 100).toFixed(0) + '%';
+          const changePct = (ratio - 1) * 100; const ratioText = (changePct > 0 ? '+' : '') + changePct.toFixed(0) + '%';
           txt = icon + ' ' + ratioText + ' (' + totalPrev7 + '→' + totalLast7 + ')';
         }
         if (txt) {
