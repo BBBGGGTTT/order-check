@@ -2614,7 +2614,7 @@ function saveToFirestore(fileName) {
       productMap[code].opts.push({opt:opt, sales:parseInt(row[todayCol])||0, sales7d:parseInt(row[col7d])||0, stock:parseInt(row[colStock])||0, daily:daily});
     });
     var codes=Object.keys(productMap);
-    var BATCH_SIZE = 100;
+    var BATCH_SIZE = 50;
     var totalBatches = Math.ceil(codes.length / BATCH_SIZE);
 
     async function saveAllBatches() {
@@ -2652,7 +2652,7 @@ function saveToFirestore(fileName) {
           throw e;
         }
         if (si + BATCH_SIZE < codes.length) {
-          await new Promise(function(r){ setTimeout(r, 2000); });
+          await new Promise(function(r){ setTimeout(r, 3000); });
         }
       }
       try {
@@ -2718,7 +2718,7 @@ async function cleanupOldOptDaily(todayStr) {
     var toProcess = targets.slice(0, DAILY_LIMIT);
 
     // 배치로 삭제 (배치당 100개, 딜레이 2초)
-    var BATCH_SIZE = 100;
+    var BATCH_SIZE = 50;
     var processed = 0;
     for (var i = 0; i < toProcess.length; i += BATCH_SIZE) {
       var batch = window.firebaseWriteBatch(window.firebaseDb);
@@ -2740,7 +2740,7 @@ async function cleanupOldOptDaily(todayStr) {
         return;
       }
       if (i + BATCH_SIZE < toProcess.length) {
-        await new Promise(function(r){ setTimeout(r, 2000); });
+        await new Promise(function(r){ setTimeout(r, 3000); });
       }
     }
     console.log('✓ optDaily 정리 완료:', processed, '개' + (hasMore ? ' (남은 것: '+(targets.length-processed)+'개, 내일 이어서 처리)' : ''));
