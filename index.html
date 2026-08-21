@@ -2671,96 +2671,83 @@ function saveToFirestore(fileName) {
 
 // 32일 이전 daily_sales 문서의 optDaily 필드 삭제
 // - 매일 파일 업로드 후 실행
-// - 페이지네이션 방식 (500개씩 조회 → timeout 방지)
+// - 하루치씩 조회 (스캔 최소화, 읽기 한도 관리)
+// - 오늘-32일부터 오늘-45일까지 자동 확인 (놓친 것 자동 감지)
 // - 하루 상한선 5,000회
-// - 놓친 것도 자동 정리
 async function cleanupOldOptDaily(todayStr) {
   if (!window.firebaseDb) return;
   try {
-    // 오늘 기준 32일 전 날짜 계산
+    console.log('optDaily 정리 시작 (하루치씩 조회 방식)');
+
+    var DAILY_LIMIT = 5000;         // 하루 처리 상한선
+    var BATCH_SIZE = 50;            // 배치당 삭제 수
+    var CHECK_DAYS_BACK = 14;       // 오늘-32일부터 며칠 뒤까지 확인 (밀린 것 자동 처리)
+    var STARTING_DAYS_AGO = 32;     // 정리 시작 날짜 (32일 이전)
+
+    var processed = 0;
+    var totalScanned = 0;
+    var moreToProcess = false;
+    var processedDates = [];
     var today = new Date(todayStr);
-    today.setDate(today.getDate() - 32);
-    var yy = today.getFullYear();
-    var mm = String(today.getMonth()+1).padStart(2,'0');
-    var dd = String(today.getDate()).padStart(2,'0');
-    var cutoffDate = yy + '-' + mm + '-' + dd;
-    console.log('optDaily 정리 시작 - 기준일:', cutoffDate, '이전');
 
-    var DAILY_LIMIT = 5000;   // 하루 처리 상한선
-    var PAGE_SIZE = 500;      // 페이지당 조회 수 (timeout 방지)
-    var BATCH_SIZE = 50;      // 배치당 삭제 수
-    var processed = 0;        // 처리 완료 수
-    var totalScanned = 0;     // 조회 총 수
-    var lastDoc = null;       // 페이지네이션 커서
-    var moreToProcess = false; // 남은 게 있는지
-
-    // 페이지별로 조회하며 처리
-    while (processed < DAILY_LIMIT) {
-      // 페이지 조회 (500개씩)
-      var q;
-      if (lastDoc) {
-        q = window.firebaseQuery(
-          window.firebaseCollection(window.firebaseDb,'daily_sales'),
-          window.firebaseWhere('date','<',cutoffDate),
-          window.firebaseOrderBy('date'),
-          window.firebaseStartAfter(lastDoc),
-          window.firebaseLimit(PAGE_SIZE)
-        );
-      } else {
-        q = window.firebaseQuery(
-          window.firebaseCollection(window.firebaseDb,'daily_sales'),
-          window.firebaseWhere('date','<',cutoffDate),
-          window.firebaseOrderBy('date'),
-          window.firebaseLimit(PAGE_SIZE)
-        );
+    // 오늘-32일부터 시작해 최대 오늘-45일까지 순차 확인
+    for (var daysAgo = STARTING_DAYS_AGO; daysAgo <= STARTING_DAYS_AGO + CHECK_DAYS_BACK; daysAgo++) {
+      if (processed >= DAILY_LIMIT) {
+        moreToProcess = true;
+        break;
       }
+
+      // 해당 날짜 계산
+      var target = new Date(today);
+      target.setDate(target.getDate() - daysAgo);
+      var yy = target.getFullYear();
+      var mm = String(target.getMonth()+1).padStart(2,'0');
+      var dd = String(target.getDate()).padStart(2,'0');
+      var targetDate = yy + '-' + mm + '-' + dd;
+
+      // 해당 날짜 문서만 조회 (하루치, 약 3,800개)
+      var q = window.firebaseQuery(
+        window.firebaseCollection(window.firebaseDb,'daily_sales'),
+        window.firebaseWhere('date','==',targetDate)
+      );
 
       var snapshot;
       try {
         snapshot = await window.firebaseGetDocs(q);
       } catch(e) {
-        console.error('페이지 조회 실패:', e);
-        await saveDeletionLog(todayStr, cutoffDate, processed, true, 'error', 'query failed: '+(e.message||''));
-        return;
-      }
-
-      if (snapshot.empty) {
-        console.log('더 이상 조회할 문서 없음');
-        break;
+        console.error(targetDate + ' 조회 실패:', e);
+        continue;
       }
 
       totalScanned += snapshot.size;
 
-      // 이 페이지의 문서 중 optDaily 있는 것만 필터링
-      var pageTargets = [];
-      snapshot.forEach(function(doc){
-        lastDoc = doc; // 페이지네이션 커서 업데이트
-        var d = doc.data();
-        if (d.optDaily && Object.keys(d.optDaily).length > 0) {
-          pageTargets.push(doc.id);
-        }
-      });
-
-      console.log('페이지 조회: 스캔', snapshot.size, '/ 정리 대상', pageTargets.length);
-
-      // 이 페이지에 정리할 것 없으면 다음 페이지로
-      if (pageTargets.length === 0) {
-        if (snapshot.size < PAGE_SIZE) {
-          break; // 마지막 페이지
-        }
-        await new Promise(function(r){ setTimeout(r, 1000); });
+      if (snapshot.empty) {
+        // 그날 저장 안 함, 스킵
         continue;
       }
 
+      // optDaily 있는 것만 필터링
+      var targets = [];
+      snapshot.forEach(function(doc){
+        var d = doc.data();
+        if (d.optDaily && Object.keys(d.optDaily).length > 0) {
+          targets.push(doc.id);
+        }
+      });
+
+      console.log(targetDate + ' 조회: 스캔', snapshot.size, '/ 정리 대상', targets.length);
+
+      if (targets.length === 0) continue;
+
       // 배치 삭제 (50개씩)
-      for (var i = 0; i < pageTargets.length; i += BATCH_SIZE) {
+      for (var i = 0; i < targets.length; i += BATCH_SIZE) {
         if (processed >= DAILY_LIMIT) {
           moreToProcess = true;
           break;
         }
         var remaining = DAILY_LIMIT - processed;
-        var chunkEnd = Math.min(i + BATCH_SIZE, i + remaining, pageTargets.length);
-        var chunk = pageTargets.slice(i, chunkEnd);
+        var chunkEnd = Math.min(i + BATCH_SIZE, i + remaining, targets.length);
+        var chunk = targets.slice(i, chunkEnd);
         var batch = window.firebaseWriteBatch(window.firebaseDb);
         chunk.forEach(function(docId){
           batch.update(window.firebaseDoc(window.firebaseDb,'daily_sales',docId), {
@@ -2774,30 +2761,23 @@ async function cleanupOldOptDaily(todayStr) {
           console.log('정리 진행:', processed, '/ 상한', DAILY_LIMIT);
         } catch(e) {
           console.error('정리 배치 실패:', e);
-          await saveDeletionLog(todayStr, cutoffDate, processed, true, 'error', e.message||'unknown');
+          await saveDeletionLog(todayStr, targetDate, processed, true, 'error', e.message||'unknown');
           return;
         }
-        if (chunkEnd < pageTargets.length && processed < DAILY_LIMIT) {
+        if (chunkEnd < targets.length && processed < DAILY_LIMIT) {
           await new Promise(function(r){ setTimeout(r, 3000); });
         }
       }
 
-      // 이 페이지가 500개 미만이면 마지막 페이지
-      if (snapshot.size < PAGE_SIZE) {
-        break;
-      }
+      processedDates.push(targetDate);
 
-      // 다음 페이지 조회 전 짧은 딜레이
-      await new Promise(function(r){ setTimeout(r, 1000); });
+      // 다음 날짜 조회 전 짧은 딜레이
+      await new Promise(function(r){ setTimeout(r, 500); });
     }
 
-    // 하루 상한 도달 시
-    if (processed >= DAILY_LIMIT) {
-      moreToProcess = true;
-    }
-
-    console.log('✓ optDaily 정리 완료:', processed, '개 (총 스캔', totalScanned, ')' + (moreToProcess ? ' - 남은 것 내일 이어서' : ''));
-    await saveDeletionLog(todayStr, cutoffDate, processed, moreToProcess, 'success', '');
+    var logDates = processedDates.length > 0 ? processedDates.join(',') : '';
+    console.log('✓ optDaily 정리 완료:', processed, '개 (총 스캔', totalScanned, ', 처리 날짜:', logDates || '없음', ')' + (moreToProcess ? ' - 상한 도달, 내일 이어서' : ''));
+    await saveDeletionLog(todayStr, logDates, processed, moreToProcess, 'success', '');
   } catch(e) {
     console.error('cleanupOldOptDaily 오류:', e);
     try { await saveDeletionLog(todayStr, '', 0, false, 'error', e.message||'unknown'); } catch(_){}
