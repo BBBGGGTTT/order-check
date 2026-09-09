@@ -443,6 +443,10 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
         <div class="file-loaded" id="fileLoaded" style="display:none"></div>
       </div>
       <div id="firebaseSaveWrap" style="display:none;margin-top:8px;">
+        <label style="display:flex;align-items:flex-start;gap:8px;padding:8px 10px;margin-bottom:6px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;cursor:pointer;font-size:12px;color:#374151;line-height:1.5;">
+          <input type="checkbox" id="updateProductsChk" style="margin-top:3px;flex-shrink:0;">
+          <span><strong>상품 정보도 업데이트</strong><br><span style="font-size:11px;color:#6b7280;">시즌 변경·신상 추가 시 체크 (평소엔 해제)</span></span>
+        </label>
         <button id="firebaseSaveBtn" onclick="onClickSaveFirebase()" style="width:100%;padding:10px;font-size:13px;font-weight:600;border:1px solid #0f6e56;border-radius:8px;background:#e1f5ee;color:#0f6e56;cursor:pointer;font-family:'Noto Sans KR',sans-serif;">☁️ Firebase에 저장</button>
         <div id="firebaseSaveStatus" style="font-size:11px;color:#6b7280;text-align:center;margin-top:4px;"></div>
       </div>
@@ -2484,12 +2488,20 @@ function loadDateData(date) {
       return;
     }
     var rows = [];
+    var dailySoldOut = {}; // daily_sales에 저장된 품절 정보 (그 날짜 기준)
+    var dailyProducts = {}; // daily_sales에 optSoldOut 필드가 있는 상품
     snapshot.forEach(function(doc) {
       var data = doc.data();
       var optSales=data.optSales||{}, opt7dSales=data.opt7dSales||{}, optStock=data.optStock||{};
       var optOrder=data.optOrder||Object.keys(optSales);
       var optDaily = data.optDaily || {};
       var optDailyDates = data.optDailyDates || [];
+      if (data.optSoldOut !== undefined && data.productName) {
+        dailyProducts[data.productName] = true;
+        Object.keys(data.optSoldOut || {}).forEach(function(opt) {
+          dailySoldOut[data.productName + '||' + opt] = data.optSoldOut[opt];
+        });
+      }
       optOrder.forEach(function(opt) {
         var row = {'상품명':data.productName||'','옵션명':opt,'당일 판매량':optSales[opt]||0,'7일 판매량':opt7dSales[opt]||0,'현재고':optStock[opt]||0,'_code':data.code||''};
         var dailyArr = optDaily[opt] || [];
@@ -2512,6 +2524,14 @@ function loadDateData(date) {
           });
         }
       });
+      // 그 날짜 daily_sales에 새 방식으로 저장된 상품이 있으면 → daily 기준으로 재설정
+      if (Object.keys(dailyProducts).length > 0) {
+        Object.keys(globalSoldOut).forEach(function(k) {
+          var pname = k.split('||')[0];
+          if (dailyProducts[pname]) delete globalSoldOut[k];
+        });
+        Object.keys(dailySoldOut).forEach(function(k) { globalSoldOut[k] = dailySoldOut[k]; });
+      }
       switchMode('recommend');
     }).catch(function() { switchMode('recommend'); });
   }).catch(function(e) {
@@ -2535,6 +2555,8 @@ function loadFromFirestore() {
     }
     console.log('Firebase에서 오늘 데이터 로드:', snapshot.size, '개 상품');
     var rows = [];
+    var dailySoldOut = {}; // daily_sales에 저장된 품절 정보 (최신)
+    var dailyProducts = {}; // daily_sales에 optSoldOut 필드가 있는 상품 (새 방식으로 저장된 것)
     snapshot.forEach(function(doc) {
       var data = doc.data();
       var optSales = data.optSales || {};
@@ -2543,6 +2565,13 @@ function loadFromFirestore() {
       var optOrder = data.optOrder || Object.keys(optSales);
       var optDaily = data.optDaily || {};
       var optDailyDates = data.optDailyDates || [];
+      // daily_sales에 optSoldOut 필드가 있으면 (빈 객체여도) 새 방식 → 이 상품은 daily 기준 사용
+      if (data.optSoldOut !== undefined && data.productName) {
+        dailyProducts[data.productName] = true;
+        Object.keys(data.optSoldOut || {}).forEach(function(opt) {
+          dailySoldOut[data.productName + '||' + opt] = data.optSoldOut[opt];
+        });
+      }
       optOrder.forEach(function(opt) {
         var row = { '상품명': data.productName || '', '옵션명': opt, '당일 판매량': optSales[opt]||0, '7일 판매량': opt7dSales[opt]||0, '현재고': optStock[opt]||0, '_code': data.code||'' };
         // 일별 데이터를 컬럼으로 복원 (파일 업로드 형식과 동일하게)
@@ -2560,12 +2589,23 @@ function loadFromFirestore() {
       prodSnap.forEach(function(doc) {
         var d=doc.data();
         if(d.season && d.productName) globalSeason[d.productName]=d.season;
+        // products의 품절 정보 (fallback — 기존 데이터 호환)
         if(d.optSoldOut && d.productName) {
           Object.keys(d.optSoldOut).forEach(function(opt) {
             globalSoldOut[d.productName + '||' + opt] = d.optSoldOut[opt];
           });
         }
       });
+      // daily_sales에 새 방식으로 저장된 상품이 있으면 → 그 상품들은 daily 기준으로 재설정
+      var dailyProductCount = Object.keys(dailyProducts).length;
+      if (dailyProductCount > 0) {
+        Object.keys(globalSoldOut).forEach(function(k) {
+          var pname = k.split('||')[0];
+          if (dailyProducts[pname]) delete globalSoldOut[k]; // daily에 정보 있는 상품은 products 값 제거
+        });
+        Object.keys(dailySoldOut).forEach(function(k) { globalSoldOut[k] = dailySoldOut[k]; });
+        console.log('품절 정보: daily_sales 기준 적용 (' + dailyProductCount + '개 상품, 품절 ' + Object.keys(dailySoldOut).length + '건)');
+      }
       var fl = document.getElementById('fileLoaded');
       if (fl) { fl.style.display='block'; fl.textContent='✓ Firebase 데이터 로드됨 ('+dateStr+')'; }
       var fs = document.getElementById('fileStatus');
@@ -2581,6 +2621,10 @@ function saveToFirestore(fileName) {
   if (!window.firebaseDb) { console.log('Firebase 미연결'); return; }
   if (firestoreSaved) { console.log('이미 저장됨'); return; }
   firestoreSaved = true;
+  // 상품 정보(products) 업데이트 여부 — 체크박스 ON일 때만 저장
+  var updateProductsEl = document.getElementById('updateProductsChk');
+  var updateProducts = updateProductsEl ? updateProductsEl.checked : false;
+  console.log('상품 정보 업데이트:', updateProducts ? 'ON (products 저장)' : 'OFF (daily_sales만 저장)');
   try {
     var today = new Date();
     var yy = today.getFullYear();
@@ -2615,7 +2659,7 @@ function saveToFirestore(fileName) {
       productMap[code].opts.push({opt:opt, sales:parseInt(row[todayCol])||0, sales7d:parseInt(row[col7d])||0, stock:parseInt(row[colStock])||0, daily:daily});
     });
     var codes=Object.keys(productMap);
-    var BATCH_SIZE = 25;
+    var BATCH_SIZE = 50;
     var totalBatches = Math.ceil(codes.length / BATCH_SIZE);
 
     async function saveAllBatches() {
@@ -2635,13 +2679,17 @@ function saveToFirestore(fileName) {
             date:dateStr, code:code, productName:prod.name, fileName:fileName,
             uploadedAt:new Date().toISOString(),
             optSales:os, opt7dSales:o7, optStock:ost, optOrder:oo,
+            optSoldOut: oso,
             optDaily: od, optDailyDates: dateCols.map(function(dc){ return String(dc).replace(/[\r\n\s]/g,''); })
           });
-          batch.set(window.firebaseDoc(window.firebaseDb,'products',code), {
-            code:code, productName:prod.name, allOpts:prod.allOpts,
-            season:globalSeason[prod.name]||'', optSoldOut:oso,
-            updatedAt:new Date().toISOString()
-          });
+          // 상품 정보(products)는 체크박스 ON일 때만 저장 (시즌 변경·신상 추가 시)
+          if (updateProducts) {
+            batch.set(window.firebaseDoc(window.firebaseDb,'products',code), {
+              code:code, productName:prod.name, allOpts:prod.allOpts,
+              season:globalSeason[prod.name]||'', optSoldOut:oso,
+              updatedAt:new Date().toISOString()
+            });
+          }
         });
         try {
           await batch.commit();
@@ -2653,7 +2701,7 @@ function saveToFirestore(fileName) {
           throw e;
         }
         if (si + BATCH_SIZE < codes.length) {
-          await new Promise(function(r){ setTimeout(r, 5000); });
+          await new Promise(function(r){ setTimeout(r, 3000); });
         }
       }
       try {
